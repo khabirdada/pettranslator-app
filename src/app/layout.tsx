@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Newsreader, Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import { SessionBridge } from "@/components/SessionBridge";
 
 // Editorial-scientific typography — matches the marketing site exactly.
 const newsreader = Newsreader({
@@ -66,7 +67,10 @@ export default function RootLayout({
       lang="en"
       className={`${newsreader.variable} ${plusJakartaSans.variable} ${jetBrainsMono.variable} antialiased`}
     >
-      <body className="min-h-screen">{children}</body>
+      <body className="min-h-screen">
+        <SessionBridge />
+        {children}
+      </body>
     </html>
   );
 }
