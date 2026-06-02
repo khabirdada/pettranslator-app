@@ -1,6 +1,20 @@
+// Pre-launch placeholder for the app.
+// If the visitor is already authenticated (e.g. after clicking a magic link
+// or signup confirmation), send them straight to /dashboard.
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { createClient } from "@/lib/supabase/server";
 
-export default function Home() {
+export default async function Home() {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (user) {
+    redirect("/dashboard");
+  }
+
   return (
     <main className="mx-auto max-w-2xl px-6 py-20 sm:py-32">
       <p className="label mb-4">§ The app · pre-launch</p>
