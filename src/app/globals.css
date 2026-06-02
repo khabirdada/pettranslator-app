@@ -1,26 +1,142 @@
 @import "tailwindcss";
 
+/* ---------- BRAND DESIGN TOKENS ----------
+   Mirrors the marketing site (pettranslator-site/index.html) so the
+   app feels like the same product. Editorial palette + serif headlines. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Brand palette — Alabaster, Charcoal, Terracotta, Slate */
+  --paper:        #F5F3E9;  /* Alabaster / Milk — page background */
+  --ink:          #1A1A1A;  /* Deep Charcoal — primary text */
+  --terra:        #C46A45;  /* Terracotta — accent / CTA */
+  --slate:        #606060;  /* Slate Gray — muted text */
+
+  /* Derived tones */
+  --paper-deep:   #EBE7D6;
+  --paper-light:  #FBFAF2;
+  --slate-soft:   #8A8A8A;
+  --terra-soft:   #D88460;
+  --terra-light:  #E3A684;
+  --rule:         #D8D2BF;
+  --rule-soft:    #E8E2CD;
+
+  /* SPACING SCALE — same brand rule as the landing.
+     Tight rhythm. Never reintroduce big ad-hoc clamp() padding. */
+  --space-2xs:    clamp(0.25rem, 0.5vw, 0.4rem);
+  --space-xs:     clamp(0.4rem,  0.8vw, 0.6rem);
+  --space-sm:     clamp(0.6rem,  1.2vw, 0.85rem);
+  --space-md:     clamp(0.85rem, 1.8vw, 1.15rem);
+  --space-lg:     clamp(1.15rem, 2.4vw, 1.5rem);
+  --space-xl:     clamp(1.5rem,  3vw,   2rem);
+  --section-y:    clamp(1.25rem, 2.5vw, 1.75rem);
 }
 
+/* Tailwind v4 token bridge — exposes bg-paper, text-ink, text-terra, etc. */
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-paper:        var(--paper);
+  --color-paper-deep:   var(--paper-deep);
+  --color-paper-light:  var(--paper-light);
+  --color-ink:          var(--ink);
+  --color-terra:        var(--terra);
+  --color-terra-soft:   var(--terra-soft);
+  --color-terra-light:  var(--terra-light);
+  --color-slate:        var(--slate);
+  --color-slate-soft:   var(--slate-soft);
+  --color-rule:         var(--rule);
+  --color-rule-soft:    var(--rule-soft);
+
+  --font-serif: var(--font-newsreader);
+  --font-sans:  var(--font-plus-jakarta);
+  --font-mono:  var(--font-jetbrains-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: clamp(16px, 1vw + 0.7rem, 17px);
+  font-weight: 400;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
 }
+
+h1, h2, h3, h4 {
+  font-family: var(--font-serif);
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.05;
+  margin: 0;
+}
+h1 { font-size: clamp(2.5rem, 7.5vw, 5.75rem); letter-spacing: -0.03em; }
+h2 { font-size: clamp(2rem, 5vw, 3.5rem); letter-spacing: -0.025em; }
+h3 { font-size: clamp(1.5rem, 3vw, 2rem); letter-spacing: -0.02em; }
+
+em { font-style: italic; }
+
+.eyebrow {
+  font-family: var(--font-sans);
+  font-size: 0.74rem;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--slate);
+}
+.label {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: var(--slate);
+  text-transform: uppercase;
+}
+
+/* Buttons — same shape language as the marketing site */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.4rem;
+  min-height: 44px;
+  background: var(--ink);
+  color: var(--paper-light);
+  font-family: var(--font-sans);
+  font-size: 0.86rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 200ms cubic-bezier(.2,.7,.3,1), background 200ms;
+}
+.btn:hover:not(:disabled) {
+  background: var(--terra);
+  transform: translateY(-1px);
+}
+.btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-light {
+  background: var(--paper-light);
+  color: var(--ink);
+  border: 1px solid var(--ink);
+}
+.btn-light:hover:not(:disabled) {
+  background: var(--ink);
+  color: var(--paper-light);
+}
+
+.input {
+  width: 100%;
+  padding: 0.95rem 1rem;
+  background: var(--paper-light);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  border: 1px solid var(--rule);
+  border-radius: 16px;
+  outline: 0;
+  transition: border-color 150ms;
+  min-height: 44px;
+}
+.input:focus { border-color: var(--ink); }
+.input::placeholder { color: var(--slate-soft); }
