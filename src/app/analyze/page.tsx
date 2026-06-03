@@ -7,7 +7,8 @@ type SubmitState =
   | { kind: "idle" }
   | { kind: "uploading" }
   | { kind: "analyzing" }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string }
+  | { kind: "rate_limited"; message: string; tier: "free" | "premium"; upgradeUrl: string | null };
 
 export default function AnalyzePage() {
   const router = useRouter();
@@ -62,6 +63,23 @@ export default function AnalyzePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ storagePath, userContext: context.trim() }),
       });
+
+      // Specific handling for 402 (rate-limit hit)
+      if (analyzeRes.status === 402) {
+        const err = (await analyzeRes.json().catch(() => ({}))) as {
+          message?: string;
+          tier?: "free" | "premium";
+          upgradeUrl?: string | null;
+        };
+        setState({
+          kind: "rate_limited",
+          message: err.message ?? "Daily limit reached.",
+          tier: err.tier ?? "free",
+          upgradeUrl: err.upgradeUrl ?? null,
+        });
+        return;
+      }
+
       if (!analyzeRes.ok) {
         const err = await analyzeRes.json().catch(() => ({}));
         throw new Error(err.error ?? `analyze_${analyzeRes.status}`);
@@ -149,6 +167,18 @@ export default function AnalyzePage() {
             Something went wrong: {state.message}. Try again or email{" "}
             <a href="mailto:hello@pettranslator.ai" className="underline">hello@pettranslator.ai</a>.
           </p>
+        )}
+
+        {state.kind === "rate_limited" && (
+          <div className="border border-terra rounded-2xl p-6 bg-paper-light">
+            <p className="label mb-2" style={{ color: "var(--terra)" }}>
+              Daily limit reached
+            </p>
+            <p className="text-sm text-ink leading-relaxed mb-4">{state.message}</p>
+            {state.upgradeUrl && state.tier === "free" && (
+              <a href={state.upgradeUrl} className="btn">Upgrade to Premium →</a>
+            )}
+          </div>
         )}
       </form>
     </main>

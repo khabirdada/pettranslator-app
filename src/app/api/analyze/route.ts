@@ -18,6 +18,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { PROMPT_VERSION } from "@/lib/ai/prompt";
 import { ACTIVE_MODEL, analyzeImage } from "@/lib/ai/analyze";
+import { checkRateLimit } from "@/lib/ratelimit";
 
 export const maxDuration = 60; // Vercel Hobby supports up to 60s; analysis ≤30s
 
@@ -50,6 +51,30 @@ export async function POST(req: NextRequest) {
   }
 
   const svc = createServiceClient();
+
+  // Rate-limit check (per-user daily cap + global ceiling)
+  const { data: profile } = await svc
+    .from("profiles")
+    .select("subscription_status")
+    .eq("id", user.id)
+    .maybeSingle();
+  const subStatus = profile?.subscription_status ?? "free";
+
+  const rl = await checkRateLimit(user.id, subStatus);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      {
+        error: rl.reason,
+        message: rl.message,
+        tier: rl.tier,
+        dailyLimit: rl.dailyLimit,
+        currentCount: rl.currentCount,
+        resetsAt: rl.resetsAt,
+        upgradeUrl: rl.tier === "free" ? "/pricing" : null,
+      },
+      { status: 402 },
+    );
+  }
 
   // 1. Insert the analyses row (status = processing)
   const { data: analysis, error: insErr } = await svc
