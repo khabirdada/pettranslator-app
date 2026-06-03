@@ -8,9 +8,11 @@
 //      spikes before they translate to a real Anthropic bill.
 //
 // Source of truth for usage is the `analyses` table itself. We count rows
-// with status IN ('processing','complete','refused','failed') because each
-// of those means we either spent or attempted to spend API credit.
-// `pending` is excluded because the AI call hasn't started yet.
+// with status IN ('processing','complete','refused') — these all consumed
+// (or are currently consuming) Claude credit.
+//   - `pending` = AI call hasn't started yet → don't count
+//   - `failed`  = our infrastructure bug killed the run → don't count,
+//                  user shouldn't be penalized for our errors
 
 import { createServiceClient } from "@/lib/supabase/server";
 
@@ -85,7 +87,7 @@ export async function checkRateLimit(
     .select("id", { count: "exact", head: true })
     .eq("user_id", userId)
     .gte("created_at", todayStart)
-    .in("status", ["processing", "complete", "refused", "failed"]);
+    .in("status", ["processing", "complete", "refused"]);
 
   if (userErr) {
     // Fail open — don't block users on infra errors
@@ -115,7 +117,7 @@ export async function checkRateLimit(
     .from("analyses")
     .select("id", { count: "exact", head: true })
     .gte("created_at", todayStart)
-    .in("status", ["processing", "complete", "refused", "failed"]);
+    .in("status", ["processing", "complete", "refused"]);
 
   if (globalErr) {
     console.error("ratelimit_global_count_failed", globalErr.message);
