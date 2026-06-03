@@ -4,7 +4,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { SYSTEM_PROMPT_V1, PROMPT_VERSION } from "./prompt";
-import { ANALYSIS_OUTPUT_SCHEMA, type AnalysisResult } from "./schema";
+import { type AnalysisResult } from "./schema";
 import { runGuardrails } from "./guardrails";
 
 export const ACTIVE_MODEL = "claude-sonnet-4-6";
@@ -46,16 +46,14 @@ export async function analyzeImage(opts: AnalyzeOpts): Promise<AnalyzeResponse> 
     : "pet_profile: (not provided)";
 
   try {
+    // We don't use Anthropic's output_config.format because their schema
+    // dialect doesn't support oneOf, and our output is a discriminated union.
+    // The system prompt is strict about JSON-only output — Claude Sonnet 4.6
+    // follows that reliably. We parse + validate the shape post-hoc.
     const response = await client.messages.create({
       model: ACTIVE_MODEL,
       max_tokens: 2048,
       system: SYSTEM_PROMPT_V1,
-      output_config: {
-        format: {
-          type: "json_schema",
-          schema: ANALYSIS_OUTPUT_SCHEMA as unknown as { [key: string]: unknown },
-        },
-      },
       messages: [
         {
           role: "user",
@@ -81,11 +79,30 @@ export async function analyzeImage(opts: AnalyzeOpts): Promise<AnalyzeResponse> 
       return { ok: false, error: "no_text_block_in_response", durationMs };
     }
 
+    // The model sometimes wraps the JSON in ```json ... ``` fences despite
+    // the system prompt rule. Strip them defensively.
+    const cleaned = textBlock.text
+      .trim()
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim();
+
     let parsed: AnalysisResult;
     try {
-      parsed = JSON.parse(textBlock.text);
-    } catch {
-      return { ok: false, error: "model_returned_non_json", durationMs };
+      parsed = JSON.parse(cleaned);
+    } catch (parseErr) {
+      console.error("model_returned_non_json", textBlock.text.slice(0, 300));
+      return { ok: false, error: `model_returned_non_json: ${parseErr instanceof Error ? parseErr.message : ""}`, durationMs };
+    }
+
+    // Minimal shape validation — must have result_type field
+    if (
+      !parsed ||
+      typeof parsed !== "object" ||
+      (parsed.result_type !== "analysis" && parsed.result_type !== "refusal")
+    ) {
+      console.error("invalid_result_type", JSON.stringify(parsed).slice(0, 300));
+      return { ok: false, error: "invalid_result_shape", durationMs };
     }
 
     // Run post-output guardrails (regex checks per system_prompt_v1.md §5)
