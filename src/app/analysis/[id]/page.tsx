@@ -98,16 +98,16 @@ export default function AnalysisPage({
   if (!data || data.status === "pending" || data.status === "processing") {
     return (
       <main className="mx-auto max-w-2xl px-6 py-20">
-        <p className="label mb-4">§ Working</p>
+        <p className="label mb-4">§ Live analysis</p>
         <h1 className="mb-6">
           Reading the <em className="text-terra">signals</em>…
         </h1>
-        <p className="text-slate mb-2">
+        <p className="text-slate mb-10 max-w-prose leading-relaxed">
           {data?.status === "processing"
-            ? "The AI is documenting biometric markers."
-            : "Your image is queued. The AI usually starts within ten seconds."}
+            ? "Tail carriage, ear angle, jaw tension, posture, weight distribution. The AI is checking the same markers a board-certified behaviorist would — in about ten seconds."
+            : "Your image is queued. The AI starts examining it in under ten seconds."}
         </p>
-        <p className="label mt-8">
+        <p className="label">
           Status · {data?.status ?? "pending"} · {polls} {polls === 1 ? "check" : "checks"}
         </p>
       </main>
