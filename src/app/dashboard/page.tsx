@@ -19,10 +19,10 @@ export default async function DashboardPage() {
     <main className="mx-auto max-w-3xl px-6 py-12 sm:py-20">
       <p className="label mb-4">§ Dashboard</p>
       <h1 className="mb-6">
-        Hello, <em className="text-terra">friend</em>.
+        Your <em className="text-terra">cases</em>.
       </h1>
       <p className="text-slate mb-10 max-w-prose">
-        Signed in as <strong className="text-ink">{user?.email}</strong>. Upload an image of your pet and the AI will return a behavioral analysis grounded in veterinary science.
+        Signed in as <strong className="text-ink">{user?.email}</strong>. Upload an image — your behavioral case file builds with each one.
       </p>
 
       <div className="flex flex-col sm:flex-row gap-3 mb-12">
@@ -31,9 +31,9 @@ export default async function DashboardPage() {
         </Link>
       </div>
 
-      <p className="label mb-4">Recent analyses</p>
+      <p className="label mb-4">Case file</p>
       {!recent || recent.length === 0 ? (
-        <p className="text-sm text-slate font-mono">— no analyses yet. Start one above.</p>
+        <p className="text-sm text-slate font-mono">— no cases yet. Open one above.</p>
       ) : (
         <ul className="border-t border-rule">
           {recent.map((row) => {
