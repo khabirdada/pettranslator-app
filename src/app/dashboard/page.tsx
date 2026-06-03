@@ -26,7 +26,9 @@ export default async function DashboardPage() {
       </p>
 
       <div className="flex flex-col sm:flex-row gap-3 mb-12">
-        <Link href="/analyze" className="btn">New analysis →</Link>
+        <Link href="/analyze" className="btn w-full sm:w-auto justify-center">
+          New analysis →
+        </Link>
       </div>
 
       <p className="label mb-4">Recent analyses</p>

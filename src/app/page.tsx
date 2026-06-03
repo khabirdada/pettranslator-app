@@ -29,10 +29,10 @@ export default async function Home() {
       </p>
 
       <div className="mt-10 flex flex-col sm:flex-row gap-3">
-        <a href="https://pettranslator.ai" className="btn">
+        <a href="https://pettranslator.ai" className="btn w-full sm:w-auto justify-center">
           Join the waitlist →
         </a>
-        <Link href="/login" className="btn btn-light">
+        <Link href="/login" className="btn btn-light w-full sm:w-auto justify-center">
           I already have access
         </Link>
       </div>

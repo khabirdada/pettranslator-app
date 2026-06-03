@@ -205,9 +205,13 @@ export default function AnalysisPage({
       <p className="label mb-4">Confidence rationale</p>
       <p className="text-slate text-sm mb-10 max-w-prose">{r.confidence_rationale}</p>
 
-      <div className="flex flex-col sm:flex-row gap-3">
-        <Link href="/analyze" className="btn">Analyze another →</Link>
-        <Link href="/dashboard" className="btn btn-light">Back to dashboard</Link>
+      <div className="flex flex-col sm:flex-row gap-3 pt-6 border-t border-rule">
+        <Link href="/analyze" className="btn w-full sm:w-auto justify-center">
+          Analyze another →
+        </Link>
+        <Link href="/dashboard" className="btn btn-light w-full sm:w-auto justify-center">
+          Back to dashboard
+        </Link>
       </div>
 
       <p className="label mt-12 text-xs">
