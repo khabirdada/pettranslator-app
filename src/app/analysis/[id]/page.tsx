@@ -235,7 +235,7 @@ export default function AnalysisPage({
     <main className="mx-auto max-w-2xl px-6 py-12 sm:py-20">
       {/* HEADER */}
       <p className="label mb-3">§ Report · {r.species}</p>
-      <h1 className="mb-6 text-3xl sm:text-4xl">
+      <h1 className="mb-6 text-2xl sm:text-3xl">
         {r.emotional_state.split(" ").slice(0, -1).join(" ")}{" "}
         <em className="text-terra">
           {r.emotional_state.split(" ").slice(-1)[0]}.
