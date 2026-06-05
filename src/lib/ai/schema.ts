@@ -75,7 +75,15 @@ export type AnalysisResult =
       emotional_state: string;
       confidence_score: number;
       confidence_rationale: string;
+      /** In v1.2+, this is THIRD-PERSON behavioral interpretation.
+       *  In v1.0/v1.1, this was first-person pet voice. Backward compat:
+       *  the result page renders this string verbatim either way. */
       translation: string;
+      /** v1.2+ — 2-4 imperative "do" items. Older analyses won't have this. */
+      action_plan_do?: string[];
+      /** v1.2+ — 1-3 imperative "avoid" items. Older analyses won't have this. */
+      action_plan_avoid?: string[];
+      /** Prose "why this helps" reasoning. In v1.2+, renders as accordion. */
       owner_action_plan: string;
       refer_to_professional: boolean;
       notes?: string | null;

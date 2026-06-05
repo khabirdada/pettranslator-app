@@ -27,7 +27,12 @@ type AnalysisOutput =
       emotional_state: string;
       confidence_score: number;
       confidence_rationale: string;
+      /** v1.2+ third-person behavioral interpretation. v1.0/v1.1 was first-person — same field, different voice. */
       translation: string;
+      /** v1.2+ — 2-4 imperative Do items. Older analyses won't have this. */
+      action_plan_do?: string[];
+      /** v1.2+ — 1-3 imperative Avoid items. Older analyses won't have this. */
+      action_plan_avoid?: string[];
       owner_action_plan: string;
       refer_to_professional: boolean;
       notes?: string | null;
@@ -43,16 +48,33 @@ const POLL_INTERVAL_MS = 1500;
 const MAX_POLLS = 80; // ~2 minutes
 
 /**
- * Map a 40-95 numeric confidence into a perceptually accurate label.
- * Solves the "78% sounds weak" psychology problem: users read 78% as "the
- * AI is unsure", even though the calibration rubric makes it a confident
- * read. We surface the *tier* first, percent as supporting evidence.
+ * Map 40-95 numeric confidence into a perceptually accurate label.
+ * v1.2: rendered VERTICALLY-STACKED (tier on its own line, percent below as
+ * subtext) so humans anchor to the qualitative tier first rather than the
+ * number. Per round-2 critique.
  */
 function confidenceLabel(score: number): { tier: string; tone: "terra" | "slate" } {
   if (score >= 90) return { tier: "Very High", tone: "terra" };
   if (score >= 75) return { tier: "High", tone: "terra" };
   if (score >= 60) return { tier: "Moderate", tone: "slate" };
   return { tier: "Lower", tone: "slate" };
+}
+
+/**
+ * Human-readable reason for a refusal code. Shown as a chip beneath the
+ * refusal headline so the user understands why instead of feeling like
+ * the app errored.
+ */
+function refusalReasonChip(code: string): string {
+  switch (code) {
+    case "no_subject_detected": return "Not clearly a dog or cat";
+    case "insufficient_signal": return "Face or body not visible enough";
+    case "unsupported_species": return "Species not yet supported";
+    case "out_of_scope": return "Outside scope (wild or farm animal)";
+    case "policy_violation": return "Image flagged by safety policy";
+    case "veterinary_referral_required": return "Possible medical signs visible";
+    default: return code.replace(/_/g, " ");
+  }
 }
 
 export default function AnalysisPage({
@@ -66,6 +88,7 @@ export default function AnalysisPage({
   const [polls, setPolls] = useState(0);
   const [showAllMarkers, setShowAllMarkers] = useState(false);
   const [showRationale, setShowRationale] = useState(false);
+  const [showWhy, setShowWhy] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -123,8 +146,8 @@ export default function AnalysisPage({
         </h1>
         <p className="text-slate mb-10 max-w-prose leading-relaxed">
           {data?.status === "processing"
-            ? "Tail carriage, ear angle, jaw tension, posture, weight distribution. The AI is checking the same markers a board-certified behaviorist would — in about ten seconds."
-            : "Your image is queued. The AI starts examining it in under ten seconds."}
+            ? "Analyzing posture, gaze, jaw tension, ear angle, weight distribution. The same markers a board-certified behaviorist would check — in about ten seconds."
+            : "Beginning behavioral analysis. The AI starts examining markers in under ten seconds."}
         </p>
         <p className="label">
           Status · {data?.status ?? "pending"} · {polls} {polls === 1 ? "check" : "checks"}
@@ -167,9 +190,15 @@ export default function AnalysisPage({
           {isVet ? (
             <>Please see your <em className="text-terra">vet</em>.</>
           ) : (
-            <>We couldn&apos;t <em className="text-terra">read</em> this image.</>
+            <>We couldn&apos;t <em className="text-terra">confidently assess</em> this photo.</>
           )}
         </h1>
+        {!isVet && (
+          <div className="inline-flex items-center gap-2 border border-rule rounded-full px-3.5 py-1.5 text-sm bg-paper-light mb-6">
+            <span className="text-terra font-mono text-xs">·</span>
+            <span className="text-ink">{refusalReasonChip(refusal.refusal_code)}</span>
+          </div>
+        )}
         <p className="text-slate text-lg leading-relaxed mb-6 max-w-prose">
           {refusal.user_message}
         </p>
@@ -191,34 +220,40 @@ export default function AnalysisPage({
   const r = output as Extract<AnalysisOutput, { result_type: "analysis" }>;
   const conf = confidenceLabel(r.confidence_score);
 
-  // Cap visible markers at 5; accordion reveals the rest.
   const VISIBLE_MARKER_CAP = 5;
   const markersToShow = showAllMarkers
     ? r.observed_markers
     : r.observed_markers.slice(0, VISIBLE_MARKER_CAP);
   const hiddenMarkerCount = r.observed_markers.length - VISIBLE_MARKER_CAP;
 
+  // v1.2+: structured Do/Avoid lists. Older analyses fall back to flat prose.
+  const hasStructuredActions =
+    (r.action_plan_do && r.action_plan_do.length > 0) ||
+    (r.action_plan_avoid && r.action_plan_avoid.length > 0);
+
   return (
     <main className="mx-auto max-w-2xl px-6 py-12 sm:py-20">
-      {/* HEADER — emotional state + confidence chip inline */}
+      {/* HEADER */}
       <p className="label mb-3">§ Report · {r.species}</p>
-      <h1 className="mb-2 text-3xl sm:text-4xl">
+      <h1 className="mb-6 text-3xl sm:text-4xl">
         {r.emotional_state.split(" ").slice(0, -1).join(" ")}{" "}
         <em className="text-terra">
           {r.emotional_state.split(" ").slice(-1)[0]}.
         </em>
       </h1>
-      <div className="flex items-baseline gap-2 mb-10">
-        <span className="label">Confidence</span>
-        <span className={`font-serif text-lg ${conf.tone === "terra" ? "text-terra" : "text-slate"}`}>
+
+      {/* CONFIDENCE — stacked vertically. Tier first, percent as subtext. */}
+      <div className="mb-10">
+        <p className="label mb-1">Confidence</p>
+        <p className={`font-serif text-2xl mb-0.5 ${conf.tone === "terra" ? "text-terra" : "text-slate"}`}>
           {conf.tier}
-        </span>
-        <span className="text-xs text-slate-soft font-mono">
-          · {r.confidence_score}% signal agreement
-        </span>
+        </p>
+        <p className="text-xs text-slate-soft font-mono">
+          {r.confidence_score}% signal agreement
+        </p>
       </div>
 
-      {/* INSTANT OBSERVATIONS — the 2-second dopamine hit (v1.1+ only) */}
+      {/* INSTANT OBSERVATIONS — 2-second scannable chips (v1.1+) */}
       {r.instant_observations && r.instant_observations.length > 0 && (
         <section className="mb-10">
           <p className="label mb-3">What we noticed first</p>
@@ -236,21 +271,78 @@ export default function AnalysisPage({
         </section>
       )}
 
-      {/* DECODED INTENT — narrower prose width per ChatGPT design crit */}
+      {/* BEHAVIORAL INTERPRETATION — third-person clinical voice in v1.2+ */}
       <section className="mb-10">
-        <p className="label mb-2">Decoded intent</p>
+        <p className="label mb-2">Behavioral interpretation</p>
         <blockquote className="font-serif italic text-xl leading-relaxed border-l-2 border-terra pl-5 max-w-xl">
-          “{r.translation}”
+          {r.translation}
         </blockquote>
       </section>
 
-      {/* OWNER ACTION PLAN — moved ABOVE evidence per ChatGPT critique:
-          users care "what should I do" before "biomechanical explanation" */}
+      {/* ACTION PLAN — v1.2+: Do/Avoid checklist with "Why this helps" accordion */}
       <section className="mb-10">
-        <p className="label mb-2">What to do</p>
-        <p className="text-ink text-base leading-relaxed max-w-prose">
-          {r.owner_action_plan}
-        </p>
+        <p className="label mb-3">What to do</p>
+
+        {hasStructuredActions ? (
+          <>
+            <div className="grid sm:grid-cols-2 gap-6 mb-6">
+              {/* DO column */}
+              {r.action_plan_do && r.action_plan_do.length > 0 && (
+                <div>
+                  <p className="text-sm font-semibold text-terra mb-2.5 font-mono uppercase tracking-wider">
+                    Do
+                  </p>
+                  <ul className="space-y-2 text-sm">
+                    {r.action_plan_do.map((item, i) => (
+                      <li key={i} className="flex gap-2.5">
+                        <span className="text-terra font-mono mt-0.5">✓</span>
+                        <span className="text-ink">{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* AVOID column */}
+              {r.action_plan_avoid && r.action_plan_avoid.length > 0 && (
+                <div>
+                  <p className="text-sm font-semibold text-slate mb-2.5 font-mono uppercase tracking-wider">
+                    Avoid
+                  </p>
+                  <ul className="space-y-2 text-sm">
+                    {r.action_plan_avoid.map((item, i) => (
+                      <li key={i} className="flex gap-2.5">
+                        <span className="text-slate font-mono mt-0.5">×</span>
+                        <span className="text-ink">{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            {/* WHY THIS HELPS — collapsed accordion */}
+            <button
+              type="button"
+              onClick={() => setShowWhy((v) => !v)}
+              className="label text-ink hover:text-terra cursor-pointer flex items-center gap-2"
+              aria-expanded={showWhy}
+            >
+              <span>{showWhy ? "▴" : "▾"}</span>
+              <span>Why this helps</span>
+            </button>
+            {showWhy && (
+              <p className="text-slate text-sm mt-3 max-w-prose leading-relaxed">
+                {r.owner_action_plan}
+              </p>
+            )}
+          </>
+        ) : (
+          // v1.0 / v1.1 fallback — flat prose
+          <p className="text-ink text-base leading-relaxed max-w-prose">
+            {r.owner_action_plan}
+          </p>
+        )}
       </section>
 
       {/* PROFESSIONAL REFERRAL — high-visibility callout */}
@@ -292,10 +384,10 @@ export default function AnalysisPage({
         )}
       </section>
 
-      {/* NOT OBSERVED — occlusion awareness, builds trust (v1.1+ only) */}
+      {/* WHAT WASN'T VISIBLE — occlusion awareness, builds trust (v1.1+) */}
       {r.not_observed && r.not_observed.length > 0 && (
         <section className="mb-10">
-          <p className="label mb-2">What we couldn&apos;t confidently observe</p>
+          <p className="label mb-2">What wasn&apos;t visible enough to assess</p>
           <ul className="space-y-1.5 text-sm text-slate font-mono">
             {r.not_observed.map((item, i) => (
               <li key={i} className="flex gap-3">
@@ -307,7 +399,7 @@ export default function AnalysisPage({
         </section>
       )}
 
-      {/* CONFIDENCE RATIONALE — collapsed by default, accordion */}
+      {/* CONFIDENCE RATIONALE — collapsed accordion */}
       <section className="mb-10 border-t border-rule pt-6">
         <button
           type="button"
@@ -335,7 +427,7 @@ export default function AnalysisPage({
         </Link>
       </div>
 
-      {/* FOOTER METADATA — subtle, technical, builds rigor signal */}
+      {/* FOOTER METADATA */}
       <p className="label mt-12 text-xs text-slate-soft">
         Model · {data.model} · prompt v{data.prompt_version} · {data.duration_ms}ms
       </p>

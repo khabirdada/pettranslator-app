@@ -103,14 +103,30 @@ export async function analyzeImage(opts: AnalyzeOpts): Promise<AnalyzeResponse> 
             minLength: 60,
             maxLength: 600,
             description:
-              "2–4 sentence first-person paraphrase of what the pet is behaviorally communicating, grounded in the observed markers.",
+              "2–4 sentence THIRD-PERSON behaviorist reading of what the pet's body language indicates. Voice: 'This dog appears…', 'The cat's posture suggests…'. NEVER first-person ('I'm…', 'I want…'). Ground every claim in observed markers. Per system prompt Stage 4.",
+          },
+          action_plan_do: {
+            type: "array",
+            minItems: 2,
+            maxItems: 4,
+            items: { type: "string", minLength: 3, maxLength: 50 },
+            description:
+              "2–4 imperative items the owner SHOULD do, each 3–8 words. Examples: 'Calm praise during settled moments', 'Reward low-stimulation reorientation'. Per system prompt Stage 5.",
+          },
+          action_plan_avoid: {
+            type: "array",
+            minItems: 1,
+            maxItems: 3,
+            items: { type: "string", minLength: 3, maxLength: 50 },
+            description:
+              "1–3 imperative items the owner should NOT do, each 3–8 words. Examples: 'Overstimulating during rest', 'Loud verbal corrections'. Per system prompt Stage 5.",
           },
           owner_action_plan: {
             type: "string",
             minLength: 60,
             maxLength: 600,
             description:
-              "2–4 sentences of specific, force-free, behavior-backed recommendations.",
+              "2–4 sentences explaining WHY the Do/Avoid items match the observed markers. Renders as 'Why this helps' accordion below the lists. Force-free only. Per system prompt Stage 5.",
           },
           refer_to_professional: {
             type: "boolean",
@@ -132,6 +148,8 @@ export async function analyzeImage(opts: AnalyzeOpts): Promise<AnalyzeResponse> 
           "confidence_score",
           "confidence_rationale",
           "translation",
+          "action_plan_do",
+          "action_plan_avoid",
           "owner_action_plan",
           "refer_to_professional",
         ],

@@ -184,7 +184,7 @@ export default function AnalyzePage() {
           className="btn w-full justify-center"
         >
           {state.kind === "uploading" && "Uploading…"}
-          {state.kind === "analyzing" && "Queueing analysis…"}
+          {state.kind === "analyzing" && "Reading behavioral signals…"}
           {(state.kind === "idle" || state.kind === "error") && "Analyze →"}
         </button>
 

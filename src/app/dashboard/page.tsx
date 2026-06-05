@@ -46,7 +46,10 @@ export default async function DashboardPage() {
     },
   );
 
-  const hasStats = stats.total > 0;
+  // Show the trends row only once it has enough data to feel meaningful.
+  // With 1-2 reports it reads underwhelming ("1 report · 1 alert") and
+  // pulls visual weight away from the actual case list.
+  const hasStats = stats.total >= 3;
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-12 sm:py-20">
@@ -65,13 +68,14 @@ export default async function DashboardPage() {
         </Link>
       </div>
 
-      {/* STATS ROW — shows category breakdown once user has ≥1 completed report */}
+      {/* BEHAVIORAL TRENDS — appears once the user has ≥3 completed reports.
+          Sub-3 it reads as filler; ≥3 it starts to look like longitudinal insight. */}
       {hasStats && (
         <div className="mb-10 border-y border-rule py-5">
-          <p className="label mb-3">Activity</p>
+          <p className="label mb-3">Behavioral trends</p>
           <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm font-mono">
             <span className="text-ink">
-              <span className="text-terra">{stats.total}</span> {stats.total === 1 ? "report" : "reports"}
+              <span className="text-terra">{stats.total}</span> {stats.total === 1 ? "observation" : "observations"}
             </span>
             {stats.calm > 0 && (
               <span className="text-slate">
@@ -110,7 +114,7 @@ export default async function DashboardPage() {
               r?.result_type === "analysis"
                 ? r.emotional_state
                 : r?.result_type === "refusal"
-                  ? "Couldn't read this image"
+                  ? "Couldn't confidently assess"
                   : row.status === "failed"
                     ? "Didn't finish"
                     : row.status;
