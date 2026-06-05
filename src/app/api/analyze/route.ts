@@ -53,14 +53,18 @@ export async function POST(req: NextRequest) {
   const svc = createServiceClient();
 
   // Rate-limit check (per-user daily cap + global ceiling)
+  // Also fetch tester flags — testers bypass the per-user cap.
   const { data: profile } = await svc
     .from("profiles")
-    .select("subscription_status")
+    .select("subscription_status, is_tester, tester_expires_at")
     .eq("id", user.id)
     .maybeSingle();
   const subStatus = profile?.subscription_status ?? "free";
 
-  const rl = await checkRateLimit(user.id, subStatus);
+  const rl = await checkRateLimit(user.id, subStatus, {
+    isTester: profile?.is_tester ?? false,
+    testerExpiresAt: profile?.tester_expires_at ?? null,
+  });
   if (!rl.allowed) {
     return NextResponse.json(
       {
