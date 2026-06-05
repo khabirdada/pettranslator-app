@@ -66,6 +66,12 @@ export type AnalysisResult =
       result_type: "analysis";
       species: "dog" | "cat";
       observed_markers: string[];
+      /** 3–5 scannable plain-English observations. Added in prompt v1.1.
+       *  Older (v1.0) analyses won't have this — render conditionally. */
+      instant_observations?: string[];
+      /** Occlusion awareness — body parts not visible. Added in prompt v1.1.
+       *  Can be empty array. Older analyses won't have it. */
+      not_observed?: string[];
       emotional_state: string;
       confidence_score: number;
       confidence_rationale: string;

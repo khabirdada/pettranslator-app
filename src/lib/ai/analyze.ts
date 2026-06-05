@@ -65,6 +65,21 @@ export async function analyzeImage(opts: AnalyzeOpts): Promise<AnalyzeResponse> 
             description:
               "4–10 clinical observations of physical markers visible in the image (tail carriage, ear position, jaw tension, etc.). Each item is one sentence.",
           },
+          instant_observations: {
+            type: "array",
+            minItems: 3,
+            maxItems: 5,
+            items: { type: "string", minLength: 4, maxLength: 32 },
+            description:
+              "3–5 scannable consumer-readable observations, each 2–4 words, plain English, NO clinical jargon. These render at the TOP of the report and must read in 2 seconds. Examples: 'Relaxed posture', 'Curious attention', 'Soft eye contact', 'No visible distress'. Per system prompt Stage 4.5.",
+          },
+          not_observed: {
+            type: "array",
+            maxItems: 6,
+            items: { type: "string", minLength: 4, maxLength: 60 },
+            description:
+              "Body parts or behavioral signals NOT visible due to framing/lighting/crop. 2–6 words each. Return [] if nothing meaningful is occluded. Per system prompt Stage 4.6.",
+          },
           emotional_state: {
             type: "string",
             description:
@@ -111,6 +126,8 @@ export async function analyzeImage(opts: AnalyzeOpts): Promise<AnalyzeResponse> 
         required: [
           "species",
           "observed_markers",
+          "instant_observations",
+          "not_observed",
           "emotional_state",
           "confidence_score",
           "confidence_rationale",

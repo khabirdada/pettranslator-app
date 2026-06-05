@@ -105,11 +105,29 @@ export default function AnalyzePage() {
       <h1 className="mb-6">
         Show me your <em className="text-terra">pet</em>.
       </h1>
-      <p className="text-slate mb-10 max-w-prose">
-        Upload a clear image of your dog or cat. The clearer the lighting and
-        framing, the more confident the analysis. Video coming after launch —
+      <p className="text-slate mb-8 max-w-prose">
+        Upload a clear image of your dog or cat. Video coming after launch —
         for now, a single representative photo.
       </p>
+
+      {/* Best-results checklist — improves output quality before the user uploads */}
+      <div className="mb-10 border border-rule rounded-2xl p-5 bg-paper-light">
+        <p className="label mb-3">Best results from</p>
+        <ul className="grid sm:grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
+          {[
+            "Eyes visible",
+            "Ears visible",
+            "Full body if possible",
+            "Natural lighting",
+            "No motion blur",
+          ].map((item) => (
+            <li key={item} className="flex items-center gap-2 text-ink">
+              <span className="text-terra font-mono text-xs">✓</span>
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
 
       <form onSubmit={onSubmit} className="space-y-6">
         {/* File picker */}
@@ -147,6 +165,14 @@ export default function AnalyzePage() {
             className="input"
             style={{ minHeight: 88 }}
           />
+          {/* Ghost examples — kills the blank-page freeze on context field.
+              Plain text, not buttons — keeps the editorial aesthetic. */}
+          <p className="mt-2 text-xs text-slate-soft leading-relaxed">
+            Try: <span className="text-slate">barking at visitors today</span>
+            {" · "}<span className="text-slate">restless after the walk</span>
+            {" · "}<span className="text-slate">suddenly hiding under the bed</span>
+            {" · "}<span className="text-slate">new rescue, first day home</span>
+          </p>
           <p className="mt-1 text-xs text-slate-soft">
             {context.length}/240 — the AI weighs context but the physical signals lead.
           </p>
