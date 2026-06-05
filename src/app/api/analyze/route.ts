@@ -52,11 +52,14 @@ export async function POST(req: NextRequest) {
 
   const svc = createServiceClient();
 
-  // Rate-limit check (per-user daily cap + global ceiling)
-  // Also fetch tester flags — testers bypass the per-user cap.
+  // Rate-limit check — v1.2 model: 3 lifetime free + 30/month premium.
+  // Also fetch tester flags (testers bypass per-user caps) and the
+  // current_period_start (anchors the "this month" window for premium).
   const { data: profile } = await svc
     .from("profiles")
-    .select("subscription_status, is_tester, tester_expires_at")
+    .select(
+      "subscription_status, is_tester, tester_expires_at, current_period_start",
+    )
     .eq("id", user.id)
     .maybeSingle();
   const subStatus = profile?.subscription_status ?? "free";
@@ -64,6 +67,7 @@ export async function POST(req: NextRequest) {
   const rl = await checkRateLimit(user.id, subStatus, {
     isTester: profile?.is_tester ?? false,
     testerExpiresAt: profile?.tester_expires_at ?? null,
+    currentPeriodStart: profile?.current_period_start ?? null,
   });
   if (!rl.allowed) {
     return NextResponse.json(
@@ -71,10 +75,15 @@ export async function POST(req: NextRequest) {
         error: rl.reason,
         message: rl.message,
         tier: rl.tier,
-        dailyLimit: rl.dailyLimit,
+        cap: rl.cap,
         currentCount: rl.currentCount,
         resetsAt: rl.resetsAt,
-        upgradeUrl: rl.tier === "free" ? "/pricing" : null,
+        // Free-tier exhaustion AND monthly cap both route to /pricing
+        // (the latter for future Power-tier upsell).
+        upgradeUrl:
+          rl.tier === "free" || rl.reason === "monthly_limit_reached"
+            ? "/pricing"
+            : null,
       },
       { status: 402 },
     );

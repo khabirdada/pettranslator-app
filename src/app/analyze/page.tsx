@@ -8,7 +8,13 @@ type SubmitState =
   | { kind: "uploading" }
   | { kind: "analyzing" }
   | { kind: "error"; message: string }
-  | { kind: "rate_limited"; message: string; tier: "free" | "premium"; upgradeUrl: string | null };
+  | {
+      kind: "rate_limited";
+      message: string;
+      tier: "free" | "premium" | "tester";
+      upgradeUrl: string | null;
+      title: string;
+    };
 
 export default function AnalyzePage() {
   const router = useRouter();
@@ -67,15 +73,25 @@ export default function AnalyzePage() {
       // Specific handling for 402 (rate-limit hit)
       if (analyzeRes.status === 402) {
         const err = (await analyzeRes.json().catch(() => ({}))) as {
+          error?: string;
           message?: string;
-          tier?: "free" | "premium";
+          tier?: "free" | "premium" | "tester";
           upgradeUrl?: string | null;
+        };
+        // Map the reason code to a human-readable section title.
+        // Different from the body message — this is the 1-line headline.
+        const titleByReason: Record<string, string> = {
+          free_quota_exhausted: "Free analyses used",
+          monthly_limit_reached: "Monthly quota reached",
+          daily_safety_ceiling: "Daily safety ceiling",
+          global_daily_ceiling: "Site at capacity",
         };
         setState({
           kind: "rate_limited",
-          message: err.message ?? "Daily limit reached.",
+          message: err.message ?? "You've reached your usage limit.",
           tier: err.tier ?? "free",
           upgradeUrl: err.upgradeUrl ?? null,
+          title: (err.error && titleByReason[err.error]) ?? "Limit reached",
         });
         return;
       }
@@ -198,11 +214,13 @@ export default function AnalyzePage() {
         {state.kind === "rate_limited" && (
           <div className="border border-terra rounded-2xl p-6 bg-paper-light">
             <p className="label mb-2" style={{ color: "var(--terra)" }}>
-              Daily limit reached
+              {state.title}
             </p>
             <p className="text-sm text-ink leading-relaxed mb-4">{state.message}</p>
-            {state.upgradeUrl && state.tier === "free" && (
-              <a href={state.upgradeUrl} className="btn">Upgrade to Premium →</a>
+            {state.upgradeUrl && (
+              <a href={state.upgradeUrl} className="btn">
+                {state.tier === "free" ? "Upgrade to Premium →" : "See your options →"}
+              </a>
             )}
           </div>
         )}
