@@ -496,21 +496,21 @@ export default function AnalysisPage({
             {/* Eyebrow + serif headline — matches the rest of the page's
                 editorial register so this doesn't read as an ad strip. */}
             <p className="label mb-2 text-slate-soft">§ Related reading</p>
-            <h2 className="font-serif text-xl mb-6">
+            <h2 className="font-serif text-xl mb-10">
               Keep <em className="text-terra">reading</em>.
             </h2>
             {/* Stacks vertically on mobile (sm-) for full-width readable
-                cards; 3-column grid on sm+. Each card: 16:10 hero strip
-                on top, label + title below. Card height is content-driven
-                so titles never need to clamp aggressively. */}
-            <ul className="grid sm:grid-cols-3 gap-5">
+                cards; 3-column grid on sm+. items-stretch + the inner
+                <a class="h-full flex flex-col"> ensures all three cards
+                are the same height regardless of title length. */}
+            <ul className="grid sm:grid-cols-3 gap-5 items-stretch">
               {related.map((a) => (
-                <li key={a.slug}>
+                <li key={a.slug} className="h-full">
                   <a
                     href={articleUrl(a.slug)}
                     target="_blank"
                     rel="noopener"
-                    className="group block border border-rule rounded-2xl overflow-hidden bg-paper-light hover:border-terra transition"
+                    className="group flex flex-col h-full border border-rule rounded-2xl overflow-hidden bg-paper-light hover:border-terra transition"
                   >
                     {/* Hero thumbnail — 600w card variant, ~20-30 KB WebP,
                         served from pettranslator.ai CDN. Lazy + async
@@ -528,15 +528,15 @@ export default function AnalysisPage({
                         className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500"
                       />
                     </div>
-                    <div className="p-4">
-                      <p className="label mb-1.5 text-xs text-slate-soft">
+                    {/* flex-1 makes the text block fill remaining height
+                        so all cards match the tallest title. */}
+                    <div className="p-4 flex-1">
+                      {/* Tighter label: text-[10px] + tracking-[0.15em]
+                          gives it a proper editorial micro-caption feel
+                          instead of the old chunky text-xs. */}
+                      <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-slate-soft mb-2">
                         {a.category.replace(/-/g, " ")} · {a.readingTime}
                       </p>
-                      {/* User feedback: previous title size was rendering
-                          huge (the app's editorial h3 default leaked through
-                          and the line-clamp-3 was truncating mid-word with
-                          "…"). Lock font-size + drop the clamp so the full
-                          title is always visible. */}
                       <h3 className="!font-serif !text-sm sm:!text-[15px] !leading-snug !font-normal text-ink group-hover:text-terra transition">
                         {a.title}
                       </h3>
