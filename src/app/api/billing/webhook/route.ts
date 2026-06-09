@@ -10,7 +10,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { getStripe } from "@/lib/stripe";
+import { getStripe, priceIdToTier } from "@/lib/stripe";
 import type Stripe from "stripe";
 
 // Raw body required for signature verification — disable Next.js's
@@ -143,8 +143,15 @@ async function handleSubscriptionUpsert(
       ? new Date(sub.items.data[0].current_period_start * 1000).toISOString()
       : null;
 
+  // Map the active price ID → tier ('premium' | 'pro'). Multiple line
+  // items shouldn't happen for our subscriptions but guard anyway by
+  // taking the FIRST item's price.
+  const priceId = sub.items.data[0]?.price?.id;
+  const tier = priceIdToTier(priceId);
+
   const update: Record<string, unknown> = {
     subscription_status: status,
+    subscription_tier: tier,
     payment_provider: "stripe",
     stripe_customer_id: customerId,
     current_period_start: periodStart,
@@ -166,7 +173,7 @@ async function handleSubscriptionDeleted(
   const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
   await svc
     .from("profiles")
-    .update({ subscription_status: "canceled" })
+    .update({ subscription_status: "canceled", subscription_tier: "free" })
     .eq("stripe_customer_id", customerId);
 }
 

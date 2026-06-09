@@ -34,5 +34,32 @@ export function getStripe(): Stripe {
   return _stripe;
 }
 
+// Price IDs (keep STRIPE_PRICE_MONTHLY/YEARLY names for backward compat;
+// they map to Premium). Pro shipped later as a third tier.
 export const STRIPE_PRICE_MONTHLY = process.env.STRIPE_PRICE_MONTHLY ?? "";
 export const STRIPE_PRICE_YEARLY = process.env.STRIPE_PRICE_YEARLY ?? "";
+export const STRIPE_PRICE_PRO_MONTHLY = process.env.STRIPE_PRICE_PRO_MONTHLY ?? "";
+
+/**
+ * Maps a Stripe price ID back to the subscription tier we charge for.
+ * Webhook uses this to set profiles.subscription_tier on subscription
+ * events; checkout uses it to know which price the user just chose.
+ *
+ * Unknown price IDs return 'free' so a misconfigured webhook can never
+ * accidentally grant access to a tier we didn't sell.
+ */
+export type SubscriptionTier = "free" | "premium" | "pro";
+export function priceIdToTier(priceId: string | null | undefined): SubscriptionTier {
+  if (!priceId) return "free";
+  if (priceId === STRIPE_PRICE_PRO_MONTHLY) return "pro";
+  if (priceId === STRIPE_PRICE_MONTHLY || priceId === STRIPE_PRICE_YEARLY) return "premium";
+  return "free";
+}
+
+export function tierToPriceId(
+  tier: "premium" | "pro",
+  interval: "monthly" | "annual",
+): string {
+  if (tier === "pro") return STRIPE_PRICE_PRO_MONTHLY; // monthly only for now
+  return interval === "annual" ? STRIPE_PRICE_YEARLY : STRIPE_PRICE_MONTHLY;
+}

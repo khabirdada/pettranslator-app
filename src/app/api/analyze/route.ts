@@ -52,13 +52,14 @@ export async function POST(req: NextRequest) {
 
   const svc = createServiceClient();
 
-  // Rate-limit check — v1.2 model: 3 lifetime free + 30/month premium.
-  // Also fetch tester flags (testers bypass per-user caps) and the
-  // current_period_start (anchors the "this month" window for premium).
+  // Rate-limit check — 3-tier model: 3 lifetime free / 30 per period premium /
+  // 75 per period pro. Also fetch tester flags (testers bypass per-user caps),
+  // current_period_start (anchors the "this month" window), and
+  // subscription_tier (distinguishes Premium from Pro caps).
   const { data: profile } = await svc
     .from("profiles")
     .select(
-      "subscription_status, is_tester, tester_expires_at, current_period_start",
+      "subscription_status, subscription_tier, is_tester, tester_expires_at, current_period_start",
     )
     .eq("id", user.id)
     .maybeSingle();
@@ -68,6 +69,7 @@ export async function POST(req: NextRequest) {
     isTester: profile?.is_tester ?? false,
     testerExpiresAt: profile?.tester_expires_at ?? null,
     currentPeriodStart: profile?.current_period_start ?? null,
+    subscriptionTier: profile?.subscription_tier ?? null,
   });
   if (!rl.allowed) {
     return NextResponse.json(

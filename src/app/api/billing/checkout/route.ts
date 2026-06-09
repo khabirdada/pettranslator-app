@@ -8,7 +8,7 @@
 
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { getStripe, STRIPE_PRICE_MONTHLY, STRIPE_PRICE_YEARLY } from "@/lib/stripe";
+import { getStripe, tierToPriceId } from "@/lib/stripe";
 
 const APP_URL =
   process.env.NEXT_PUBLIC_APP_URL || "https://app.pettranslator.ai";
@@ -22,14 +22,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  let body: { interval?: "monthly" | "annual" };
+  let body: { tier?: "premium" | "pro"; interval?: "monthly" | "annual" };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
-  const interval = body.interval === "monthly" ? "monthly" : "annual";
-  const priceId = interval === "monthly" ? STRIPE_PRICE_MONTHLY : STRIPE_PRICE_YEARLY;
+  const tier = body.tier === "pro" ? "pro" : "premium";
+  // Pro is monthly-only for now. Premium accepts both.
+  const interval = tier === "pro"
+    ? "monthly"
+    : body.interval === "monthly"
+      ? "monthly"
+      : "annual";
+  const priceId = tierToPriceId(tier, interval);
   if (!priceId) {
     return NextResponse.json({ error: "price_not_configured" }, { status: 500 });
   }

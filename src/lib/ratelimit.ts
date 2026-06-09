@@ -24,11 +24,27 @@
 
 import { createServiceClient } from "@/lib/supabase/server";
 
-// Caps (locked pricing, June 2026)
+// Caps (locked pricing, June 2026 + Pro tier added)
+//   Free     — 3 lifetime
+//   Premium  — 30 / billing-period ($4.99/mo or $39.99/yr)
+//   Pro      — 75 / billing-period ($9.99/mo)
+//   Tester   — bypass per-user caps, global ceiling still applies
+//   Global   — 2,000 / day site-wide (everyone)
+//
+// Daily safety ceiling scales with tier so a Pro user can actually use
+// their 75/month without hitting the ceiling on a high-use day.
 export const FREE_LIFETIME_LIMIT = 3;
 export const PREMIUM_MONTHLY_LIMIT = 30;
 export const PREMIUM_DAILY_SAFETY_CEILING = 10;
+export const PRO_MONTHLY_LIMIT = 75;
+export const PRO_DAILY_SAFETY_CEILING = 25;
 export const GLOBAL_DAILY_CEILING = 2000;
+
+// Pet-profile caps per tier — enforced by the dashboard, not the analyze
+// pipeline (you can analyze any pet regardless of profile count).
+export const FREE_MAX_PETS = 1;
+export const PREMIUM_MAX_PETS = 5;
+export const PRO_MAX_PETS = 15;
 
 // 30 days = one billing "month" for fallback when current_period_start is
 // missing (e.g. legacy active subs that pre-date the column).
@@ -42,9 +58,12 @@ export type RateLimitOptions = {
   /** profiles.current_period_start — ISO string. Set by billing webhook
    *  on each renewal. Fallback: 30 days ago if missing. */
   currentPeriodStart?: string | null;
+  /** profiles.subscription_tier — 'free' | 'premium' | 'pro'. Only consulted
+   *  when subscription_status === 'active'; otherwise the cap is 'free'. */
+  subscriptionTier?: "free" | "premium" | "pro" | null;
 };
 
-export type RateLimitTier = "free" | "premium" | "tester";
+export type RateLimitTier = "free" | "premium" | "pro" | "tester";
 
 export type RateLimitVerdict =
   | {
@@ -146,23 +165,32 @@ export async function checkRateLimit(
   const svc = createServiceClient();
   const testerActive = isActiveTester(options);
 
+  // Active subscribers map status='active' + tier → premium | pro.
+  // Anyone not active drops to 'free' regardless of tier column value.
+  const paidTier: "premium" | "pro" =
+    subscriptionStatus === "active" && options?.subscriptionTier === "pro"
+      ? "pro"
+      : "premium";
+
   const tier: RateLimitTier = testerActive
     ? "tester"
     : subscriptionStatus === "active"
-      ? "premium"
+      ? paidTier
       : "free";
 
   // ─── 1. Tester short-circuit ──────────────────────────────────────────────
   if (testerActive) {
     // Testers skip per-user caps. Global ceiling still applies.
-    return runGlobalCheck(svc, tier, /* userCurrentCount */ 0, /* userCap */ PREMIUM_MONTHLY_LIMIT);
+    return runGlobalCheck(svc, tier, 0, PRO_MONTHLY_LIMIT);
   }
 
-  // ─── 2. Premium tier checks ───────────────────────────────────────────────
-  if (tier === "premium") {
+  // ─── 2. Paid tier checks (Premium or Pro) ─────────────────────────────────
+  if (tier === "premium" || tier === "pro") {
     const periodStart = resolvePeriodStart(options?.currentPeriodStart);
+    const monthlyCap = tier === "pro" ? PRO_MONTHLY_LIMIT : PREMIUM_MONTHLY_LIMIT;
+    const dailyCeiling = tier === "pro" ? PRO_DAILY_SAFETY_CEILING : PREMIUM_DAILY_SAFETY_CEILING;
 
-    // 2a. Period cap (30 analyses since current_period_start)
+    // 2a. Period cap (Premium 30 / Pro 75 since current_period_start)
     const { count: periodCount, error: periodErr } = await svc
       .from("analyses")
       .select("id", { count: "exact", head: true })
@@ -172,23 +200,23 @@ export async function checkRateLimit(
 
     if (periodErr) {
       console.error("ratelimit_period_count_failed", periodErr.message);
-      return { allowed: true, currentCount: 0, cap: PREMIUM_MONTHLY_LIMIT, tier };
+      return { allowed: true, currentCount: 0, cap: monthlyCap, tier };
     }
 
     const usedThisPeriod = periodCount ?? 0;
-    if (usedThisPeriod >= PREMIUM_MONTHLY_LIMIT) {
+    if (usedThisPeriod >= monthlyCap) {
       return {
         allowed: false,
         reason: "monthly_limit_reached",
         currentCount: usedThisPeriod,
-        cap: PREMIUM_MONTHLY_LIMIT,
+        cap: monthlyCap,
         tier,
         resetsAt: periodEndISO(periodStart),
-        message: `You've used all ${PREMIUM_MONTHLY_LIMIT} analyses this period. Your quota resets on the next billing renewal.`,
+        message: `You've used all ${monthlyCap} analyses this period. Your quota resets on the next billing renewal.`,
       };
     }
 
-    // 2b. Daily safety ceiling (10/day) — prevents single-day cost spikes
+    // 2b. Daily safety ceiling — prevents single-day cost spikes
     const todayStart = startOfTodayUtcISO();
     const { count: todayCount, error: todayErr } = await svc
       .from("analyses")
@@ -200,20 +228,19 @@ export async function checkRateLimit(
     if (todayErr) {
       console.error("ratelimit_today_count_failed", todayErr.message);
       // Fall through — we already validated the period cap
-    } else if ((todayCount ?? 0) >= PREMIUM_DAILY_SAFETY_CEILING) {
+    } else if ((todayCount ?? 0) >= dailyCeiling) {
       return {
         allowed: false,
         reason: "daily_safety_ceiling",
         currentCount: todayCount ?? 0,
-        cap: PREMIUM_DAILY_SAFETY_CEILING,
+        cap: dailyCeiling,
         tier,
         resetsAt: nextUtcMidnightISO(),
-        message: `You've used ${todayCount} of your ${PREMIUM_MONTHLY_LIMIT} monthly analyses today — that's your daily safety limit (${PREMIUM_DAILY_SAFETY_CEILING}/day). Resets at midnight UTC.`,
+        message: `You've used ${todayCount} of your ${monthlyCap} monthly analyses today — that's your daily safety limit (${dailyCeiling}/day). Resets at midnight UTC.`,
       };
     }
 
-    // Premium passes per-user checks — fall through to global ceiling
-    return runGlobalCheck(svc, tier, usedThisPeriod, PREMIUM_MONTHLY_LIMIT);
+    return runGlobalCheck(svc, tier, usedThisPeriod, monthlyCap);
   }
 
   // ─── 3. Free tier checks (3 lifetime) ─────────────────────────────────────
