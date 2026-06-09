@@ -497,7 +497,7 @@ export default function AnalysisPage({
                 editorial register so this doesn't read as an ad strip. */}
             <p className="label mb-2 text-slate-soft">§ Go deeper</p>
             <h2 className="font-serif text-xl mb-2">
-              Understand <em className="text-terra">them</em> better.
+              Understand <em className="text-terra">your pet</em> better.
             </h2>
             {/* One-line lede explains WHY this row exists — these are the
                 pieces that deepen the single-snapshot analysis above into
