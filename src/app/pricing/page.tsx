@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 // Locked pricing (June 2026):
 //   Free:    3 analyses lifetime
@@ -17,9 +18,43 @@ const PREMIUM_ANNUAL_USD = 39.99;
 const ANNUAL_DISCOUNT_PERCENT = 33; // 39.99/12 = $3.33/mo vs $4.99/mo
 
 export default function PricingPage() {
+  const router = useRouter();
   // Annual is PRESELECTED — 30-50% lift on annual conversion per published
   // SaaS pricing experiments. Aligns with the locked pricing decision.
   const [interval, setInterval] = useState<BillingInterval>("annual");
+  const [checkoutState, setCheckoutState] = useState<
+    { kind: "idle" } | { kind: "loading" } | { kind: "error"; msg: string }
+  >({ kind: "idle" });
+
+  // Click handler for "Get Premium →".
+  // Calls /api/billing/checkout. If user is signed in → Stripe Checkout URL,
+  // redirected immediately. If 401 → route to /login with the intent so we
+  // return them to /pricing on success and they can click Premium again.
+  async function startCheckout() {
+    setCheckoutState({ kind: "loading" });
+    try {
+      const res = await fetch("/api/billing/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ interval }),
+      });
+      if (res.status === 401) {
+        router.push(`/login?intent=premium&interval=${interval}`);
+        return;
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? `checkout_${res.status}`);
+      }
+      const { url } = (await res.json()) as { url: string };
+      window.location.assign(url);
+    } catch (err) {
+      setCheckoutState({
+        kind: "error",
+        msg: err instanceof Error ? err.message : "checkout_failed",
+      });
+    }
+  }
 
   const premiumPrice = interval === "annual" ? PREMIUM_ANNUAL_USD : PREMIUM_MONTHLY_USD;
   const premiumPeriod = interval === "annual" ? "year" : "month";
@@ -193,20 +228,27 @@ export default function PricingPage() {
               </li>
             ))}
           </ul>
-          {/*
-            PayPal Subscriptions API integration ships when credentials
-            arrive (task #31). For now: route to /login so users start
-            the funnel — existing accounts will be first to upgrade
-            when checkout goes live.
-          */}
-          <Link
-            href={`/login?intent=premium&interval=${interval}`}
+          <button
+            type="button"
+            onClick={startCheckout}
+            disabled={checkoutState.kind === "loading"}
             className="btn w-full justify-center"
           >
-            Get Premium →
-          </Link>
+            {checkoutState.kind === "loading"
+              ? "Opening checkout…"
+              : "Get Premium →"}
+          </button>
+          {checkoutState.kind === "error" && (
+            <p className="text-xs text-terra mt-2">
+              {checkoutState.msg}. Try again or email{" "}
+              <a href="mailto:hello@pettranslator.ai" className="underline">
+                hello@pettranslator.ai
+              </a>
+              .
+            </p>
+          )}
           <p className="label mt-3 text-xs text-slate-soft">
-            Checkout launches with PayPal in {new Date().toLocaleString("en-US", { month: "short" })} — early access to all current accounts.
+            Secure checkout by Stripe · cancel any time
           </p>
         </div>
       </div>
