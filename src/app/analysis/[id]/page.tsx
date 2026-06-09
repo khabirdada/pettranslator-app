@@ -532,12 +532,12 @@ export default function AnalysisPage({
                       <p className="label mb-1.5 text-xs text-slate-soft">
                         {a.category.replace(/-/g, " ")} · {a.readingTime}
                       </p>
-                      {/* Smaller serif title (text-[15px]) keeps the card
-                          compact and reads on a 3-column desktop strip
-                          without ugly multi-line wraps that the larger
-                          text-base produced. line-clamp-3 caps very long
-                          titles so cards stay roughly the same height. */}
-                      <h3 className="font-serif text-[15px] sm:text-base leading-snug text-ink group-hover:text-terra transition line-clamp-3">
+                      {/* User feedback: previous title size was rendering
+                          huge (the app's editorial h3 default leaked through
+                          and the line-clamp-3 was truncating mid-word with
+                          "…"). Lock font-size + drop the clamp so the full
+                          title is always visible. */}
+                      <h3 className="!font-serif !text-sm sm:!text-[15px] !leading-snug !font-normal text-ink group-hover:text-terra transition">
                         {a.title}
                       </h3>
                     </div>
