@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 type SubmitState =
@@ -16,13 +16,50 @@ type SubmitState =
       title: string;
     };
 
+// Elapsed-seconds thresholds for progressive UI messaging.
+// Anchored to the actual Vercel maxDuration (60s) and the
+// typical Claude latency band (6–15s).
+const ELAPSED_LONG = 15;     // "taking longer than usual"
+const ELAPSED_ALMOST = 45;   // "almost there"
+const ELAPSED_TIMEOUT = 65;  // assume function dead, surface recovery
+
 export default function AnalyzePage() {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [context, setContext] = useState("");
   const [state, setState] = useState<SubmitState>({ kind: "idle" });
+  const [elapsedSec, setElapsedSec] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Tick an elapsed-seconds counter whenever an in-flight request is open.
+  // Drives the progressive "this is taking longer…" / hard-timeout
+  // messaging without a per-render setInterval rebind.
+  useEffect(() => {
+    if (state.kind !== "uploading" && state.kind !== "analyzing") {
+      setElapsedSec(0);
+      return;
+    }
+    const startedAt = Date.now();
+    const id = setInterval(() => {
+      setElapsedSec(Math.floor((Date.now() - startedAt) / 1000));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [state.kind]);
+
+  // Hard timeout: if we exceed ELAPSED_TIMEOUT without a server response,
+  // the Vercel function has almost certainly been killed. Move to an
+  // error state so the user gets a recovery action instead of a spinner
+  // that will never resolve.
+  useEffect(() => {
+    if (state.kind !== "analyzing") return;
+    if (elapsedSec < ELAPSED_TIMEOUT) return;
+    setState({
+      kind: "error",
+      message:
+        "The analysis didn't complete in time. Your image was saved — try again, or check your dashboard in a minute (the result may still arrive).",
+    });
+  }, [elapsedSec, state.kind]);
 
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0] ?? null;
@@ -204,11 +241,52 @@ export default function AnalyzePage() {
           {(state.kind === "idle" || state.kind === "error") && "Analyze →"}
         </button>
 
+        {/* Progressive elapsed-time feedback while submitting. Sets a
+            realistic expectation (Claude takes 6–15s typical, can stretch
+            to 30s+ for video) so the user doesn't bounce thinking it
+            crashed. Hard timeout at ELAPSED_TIMEOUT routes to the error
+            block below with a recovery action. */}
+        {submitting && (
+          <div className="text-sm text-slate-soft font-mono">
+            <div className="flex items-center gap-3">
+              <span className="inline-block size-2 rounded-full bg-terra animate-pulse" />
+              <span>
+                {state.kind === "uploading"
+                  ? `Uploading · ${elapsedSec}s`
+                  : `Analyzing · ${elapsedSec}s`}
+              </span>
+            </div>
+            {state.kind === "analyzing" && elapsedSec >= ELAPSED_LONG && elapsedSec < ELAPSED_ALMOST && (
+              <p className="mt-2 text-slate leading-relaxed">
+                Taking a little longer than usual — typical runs finish in 6–15s.
+                We&rsquo;ll keep waiting.
+              </p>
+            )}
+            {state.kind === "analyzing" && elapsedSec >= ELAPSED_ALMOST && (
+              <p className="mt-2 text-slate leading-relaxed">
+                Almost there. If we don&rsquo;t hear back by{" "}
+                <span className="text-ink font-semibold">{ELAPSED_TIMEOUT}s</span>{" "}
+                we&rsquo;ll save your upload and you can retry — nothing is lost.
+              </p>
+            )}
+          </div>
+        )}
+
         {state.kind === "error" && (
-          <p className="text-sm text-terra">
-            Something went wrong: {state.message}. Try again or email{" "}
-            <a href="mailto:hello@pettranslator.ai" className="underline">hello@pettranslator.ai</a>.
-          </p>
+          <div className="border border-terra/40 rounded-2xl p-5 bg-paper-light text-sm">
+            <p className="text-terra font-medium mb-2">Something went wrong</p>
+            <p className="text-ink leading-relaxed mb-3">{state.message}</p>
+            <p className="text-slate-soft text-xs">
+              Still stuck? Email{" "}
+              <a
+                href="mailto:hello@pettranslator.ai"
+                className="text-terra underline hover:no-underline"
+              >
+                hello@pettranslator.ai
+              </a>{" "}
+              and we&rsquo;ll look at it personally.
+            </p>
+          </div>
         )}
 
         {state.kind === "rate_limited" && (

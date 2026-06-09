@@ -2,6 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
+import { pickRelatedArticles, articleUrl } from "@/lib/related-articles";
 
 type AnalysisRecord = {
   id: string;
@@ -113,6 +114,11 @@ export default function AnalysisPage({
           json.status === "refused";
         if (!isTerminal && n < MAX_POLLS) {
           setTimeout(tick, POLL_INTERVAL_MS);
+        } else if (!isTerminal) {
+          // Polling exhausted — previous version silently stopped, leaving the
+          // user staring at a spinner forever. Surface a recoverable error
+          // so they can navigate away or retry.
+          setError("poll_exhausted");
         }
       } catch (err) {
         if (!active) return;
@@ -127,31 +133,87 @@ export default function AnalysisPage({
   }, [id]);
 
   if (error) {
+    // Friendly messages for the codes we expect to see. Anything else
+    // shows the raw code so we can debug from support tickets.
+    const friendly: Record<string, { title: string; body: string }> = {
+      not_found: {
+        title: "Analysis not found",
+        body: "We couldn't find this analysis. It may have been deleted, or the link might be wrong. Your other analyses are still in your dashboard.",
+      },
+      poll_exhausted: {
+        title: "Still processing",
+        body: "This analysis is taking longer than two minutes — that's well outside our usual range. Your image is saved; refresh in a minute or check your dashboard. If it keeps showing up as processing, email hello@pettranslator.ai and we'll look at it personally.",
+      },
+      fetch_failed: {
+        title: "Connection problem",
+        body: "We lost the connection while checking the status. Reload the page — your analysis is safe on our side.",
+      },
+    };
+    const f = friendly[error] ?? {
+      title: "Something broke",
+      body: `Code: ${error}. Refresh the page or come back in a minute — your image is safe.`,
+    };
     return (
       <main className="mx-auto max-w-2xl px-6 py-20">
-        <p className="label mb-4">§ Error</p>
-        <h1 className="mb-6">Something <em className="text-terra">broke</em>.</h1>
-        <p className="text-slate">Code: <span className="font-mono">{error}</span></p>
-        <Link href="/dashboard" className="btn mt-8">← Back to dashboard</Link>
+        <p className="label mb-4">§ {error === "poll_exhausted" ? "Status update" : "Issue"}</p>
+        <h1 className="mb-6">{f.title}</h1>
+        <p className="text-slate max-w-prose leading-relaxed mb-8">{f.body}</p>
+        <div className="flex flex-col sm:flex-row gap-3">
+          {error === "poll_exhausted" && (
+            <button
+              onClick={() => window.location.reload()}
+              className="btn w-full sm:w-auto justify-center"
+            >
+              Refresh now →
+            </button>
+          )}
+          <Link href="/dashboard" className="btn btn-light w-full sm:w-auto justify-center">
+            ← Back to dashboard
+          </Link>
+        </div>
       </main>
     );
   }
 
   if (!data || data.status === "pending" || data.status === "processing") {
+    // Each poll is ~POLL_INTERVAL_MS apart so we can derive elapsed
+    // seconds from the poll count. Don't recompute on render — anchor
+    // to data.created_at when we have it for accuracy.
+    const elapsedSec = data?.created_at
+      ? Math.floor((Date.now() - new Date(data.created_at).getTime()) / 1000)
+      : Math.floor((polls * POLL_INTERVAL_MS) / 1000);
     return (
       <main className="mx-auto max-w-2xl px-6 py-20">
         <p className="label mb-4">§ Live analysis</p>
         <h1 className="mb-6">
           Reading the <em className="text-terra">signals</em>…
         </h1>
-        <p className="text-slate mb-10 max-w-prose leading-relaxed">
+        <p className="text-slate mb-6 max-w-prose leading-relaxed">
           {data?.status === "processing"
             ? "Analyzing posture, gaze, jaw tension, ear angle, weight distribution. The same markers a board-certified behaviorist would check — in about ten seconds."
             : "Beginning behavioral analysis. The AI starts examining markers in under ten seconds."}
         </p>
-        <p className="label">
-          Status · {data?.status ?? "pending"} · {polls} {polls === 1 ? "check" : "checks"}
-        </p>
+
+        {/* Live pulse + elapsed-time chip so the user can see the
+            page is working, not frozen. Progressive copy at 15s/45s
+            sets a realistic expectation before the hard timeout at
+            ~2 min hits poll_exhausted. */}
+        <div className="flex items-center gap-3 mb-4 text-sm text-slate-soft font-mono">
+          <span className="inline-block size-2 rounded-full bg-terra animate-pulse" />
+          <span>{(data?.status ?? "pending").toUpperCase()} · {elapsedSec}s elapsed</span>
+        </div>
+        {elapsedSec >= 15 && elapsedSec < 45 && (
+          <p className="text-sm text-slate leading-relaxed max-w-prose">
+            Taking a little longer than usual — typical analyses finish in 6–15s.
+            We&rsquo;re still working on it.
+          </p>
+        )}
+        {elapsedSec >= 45 && (
+          <p className="text-sm text-slate leading-relaxed max-w-prose">
+            Almost there. If we don&rsquo;t finish by 2 minutes, this page will
+            offer a refresh — your upload is safe either way.
+          </p>
+        )}
       </main>
     );
   }
@@ -416,6 +478,44 @@ export default function AnalysisPage({
           </p>
         )}
       </section>
+
+      {/* RELATED READING — deterministic per-species + behavior-signal
+          matching. Drives blog traffic from the most-engaged moment
+          (post-analysis), which lifts time-on-site, return visits, and
+          AI-search citation indirectly via blog dwell signals. */}
+      {(() => {
+        const related = pickRelatedArticles({
+          species: r.species,
+          emotionalState: r.emotional_state,
+          markers: r.observed_markers,
+          referToProfessional: r.refer_to_professional,
+        }, 3);
+        if (!related.length) return null;
+        return (
+          <section className="mb-10 border-t border-rule pt-8">
+            <p className="label mb-5 text-slate-soft">Related reading</p>
+            <ul className="grid sm:grid-cols-3 gap-5">
+              {related.map((a) => (
+                <li key={a.slug}>
+                  <a
+                    href={articleUrl(a.slug)}
+                    target="_blank"
+                    rel="noopener"
+                    className="group block border border-rule rounded-2xl p-4 hover:border-terra transition"
+                  >
+                    <p className="label mb-1 text-xs text-slate-soft">
+                      {a.category.replace(/-/g, " ")} · {a.readingTime}
+                    </p>
+                    <h3 className="font-serif text-base leading-snug text-ink group-hover:text-terra transition">
+                      {a.title}
+                    </h3>
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })()}
 
       {/* CTAS */}
       <div className="flex flex-col sm:flex-row gap-3 pt-6 border-t border-rule">
