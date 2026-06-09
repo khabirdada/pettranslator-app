@@ -495,10 +495,18 @@ export default function AnalysisPage({
           <section className="mb-10 border-t border-rule pt-8">
             {/* Eyebrow + serif headline — matches the rest of the page's
                 editorial register so this doesn't read as an ad strip. */}
-            <p className="label mb-2 text-slate-soft">§ Related reading</p>
-            <h2 className="font-serif text-xl mb-10">
-              Keep <em className="text-terra">reading</em>.
+            <p className="label mb-2 text-slate-soft">§ Go deeper</p>
+            <h2 className="font-serif text-xl mb-2">
+              Understand <em className="text-terra">them</em> better.
             </h2>
+            {/* One-line lede explains WHY this row exists — these are the
+                pieces that deepen the single-snapshot analysis above into
+                a real working understanding of the pet's behavioral patterns. */}
+            <p className="text-slate text-sm leading-relaxed mb-10 max-w-prose">
+              The single analysis above is one moment in time. These guides
+              put it in context — what the signals usually mean, how they
+              change with arousal, and what to watch for next.
+            </p>
             {/* Stacks vertically on mobile (sm-) for full-width readable
                 cards; 3-column grid on sm+. items-stretch + the inner
                 <a class="h-full flex flex-col"> ensures all three cards
