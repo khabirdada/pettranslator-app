@@ -12,6 +12,18 @@
 
 const SITE = "https://pettranslator.ai";
 
+/**
+ * Hero image URL for a related-articles thumbnail. Card variant (600w,
+ * ~25 KB WebP) is pre-generated on the marketing site at build time —
+ * we just reference the public path here.
+ *
+ * The thumbnail and full hero share the same slug — the suffix `-card`
+ * is the convention from site-next/scripts/generate_card_variants.mjs.
+ */
+export function heroThumbUrl(slug: string): string {
+  return `${SITE}/blog/heroes/${slug}-card.webp`;
+}
+
 export interface ArticleSuggestion {
   slug: string;
   title: string;

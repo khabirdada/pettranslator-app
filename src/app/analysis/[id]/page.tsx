@@ -2,7 +2,7 @@
 
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
-import { pickRelatedArticles, articleUrl } from "@/lib/related-articles";
+import { pickRelatedArticles, articleUrl, heroThumbUrl } from "@/lib/related-articles";
 
 type AnalysisRecord = {
   id: string;
@@ -493,7 +493,16 @@ export default function AnalysisPage({
         if (!related.length) return null;
         return (
           <section className="mb-10 border-t border-rule pt-8">
-            <p className="label mb-5 text-slate-soft">Related reading</p>
+            {/* Eyebrow + serif headline — matches the rest of the page's
+                editorial register so this doesn't read as an ad strip. */}
+            <p className="label mb-2 text-slate-soft">§ Related reading</p>
+            <h2 className="font-serif text-xl mb-6">
+              Keep <em className="text-terra">reading</em>.
+            </h2>
+            {/* Stacks vertically on mobile (sm-) for full-width readable
+                cards; 3-column grid on sm+. Each card: 16:10 hero strip
+                on top, label + title below. Card height is content-driven
+                so titles never need to clamp aggressively. */}
             <ul className="grid sm:grid-cols-3 gap-5">
               {related.map((a) => (
                 <li key={a.slug}>
@@ -501,14 +510,37 @@ export default function AnalysisPage({
                     href={articleUrl(a.slug)}
                     target="_blank"
                     rel="noopener"
-                    className="group block border border-rule rounded-2xl p-4 hover:border-terra transition"
+                    className="group block border border-rule rounded-2xl overflow-hidden bg-paper-light hover:border-terra transition"
                   >
-                    <p className="label mb-1 text-xs text-slate-soft">
-                      {a.category.replace(/-/g, " ")} · {a.readingTime}
-                    </p>
-                    <h3 className="font-serif text-base leading-snug text-ink group-hover:text-terra transition">
-                      {a.title}
-                    </h3>
+                    {/* Hero thumbnail — 600w card variant, ~20-30 KB WebP,
+                        served from pettranslator.ai CDN. Lazy + async
+                        decoding so it doesn't compete with the analysis
+                        UI for first paint. */}
+                    <div className="aspect-[16/10] overflow-hidden bg-paper-deep">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={heroThumbUrl(a.slug)}
+                        alt=""
+                        width={600}
+                        height={375}
+                        loading="lazy"
+                        decoding="async"
+                        className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-500"
+                      />
+                    </div>
+                    <div className="p-4">
+                      <p className="label mb-1.5 text-xs text-slate-soft">
+                        {a.category.replace(/-/g, " ")} · {a.readingTime}
+                      </p>
+                      {/* Smaller serif title (text-[15px]) keeps the card
+                          compact and reads on a 3-column desktop strip
+                          without ugly multi-line wraps that the larger
+                          text-base produced. line-clamp-3 caps very long
+                          titles so cards stay roughly the same height. */}
+                      <h3 className="font-serif text-[15px] sm:text-base leading-snug text-ink group-hover:text-terra transition line-clamp-3">
+                        {a.title}
+                      </h3>
+                    </div>
                   </a>
                 </li>
               ))}
