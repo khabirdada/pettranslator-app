@@ -21,6 +21,7 @@ type Tier = "free" | "premium" | "pro";
 const PREMIUM_MONTHLY_USD = 4.99;
 const PREMIUM_ANNUAL_USD = 39.99;
 const PRO_MONTHLY_USD = 9.99;
+const PRO_ANNUAL_USD = 79.99;
 const ANNUAL_DISCOUNT_PERCENT = 33;
 
 export default function PricingPage() {
@@ -39,11 +40,7 @@ export default function PricingPage() {
       const res = await fetch("/api/billing/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tier,
-          // Pro ignores interval (monthly only) but pass it consistently.
-          interval: tier === "pro" ? "monthly" : interval,
-        }),
+        body: JSON.stringify({ tier, interval }),
       });
       if (res.status === 401) {
         router.push(`/login?intent=${tier}&interval=${interval}`);
@@ -69,9 +66,12 @@ export default function PricingPage() {
     checkoutState.kind === "error" && checkoutState.tier === t ? checkoutState.msg : null;
 
   const premiumPrice = interval === "annual" ? PREMIUM_ANNUAL_USD : PREMIUM_MONTHLY_USD;
-  const premiumPeriod = interval === "annual" ? "year" : "month";
-  const equivalentMonthly =
+  const proPrice = interval === "annual" ? PRO_ANNUAL_USD : PRO_MONTHLY_USD;
+  const period = interval === "annual" ? "year" : "month";
+  const premiumEquivalentMonthly =
     interval === "annual" ? (PREMIUM_ANNUAL_USD / 12).toFixed(2) : null;
+  const proEquivalentMonthly =
+    interval === "annual" ? (PRO_ANNUAL_USD / 12).toFixed(2) : null;
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-12 sm:py-20">
@@ -96,6 +96,7 @@ export default function PricingPage() {
                   { "@type": "Offer", name: "Premium Monthly", price: "4.99", priceCurrency: "USD" },
                   { "@type": "Offer", name: "Premium Annual", price: "39.99", priceCurrency: "USD" },
                   { "@type": "Offer", name: "Pro Monthly", price: "9.99", priceCurrency: "USD" },
+                  { "@type": "Offer", name: "Pro Annual", price: "79.99", priceCurrency: "USD" },
                 ],
               },
             ],
@@ -112,11 +113,11 @@ export default function PricingPage() {
         consistency or Pro for power-user volume across the whole household.
       </p>
 
-      {/* INTERVAL TOGGLE — affects Premium only; Pro is monthly */}
+      {/* INTERVAL TOGGLE — affects BOTH Premium and Pro */}
       <div className="flex justify-center mb-10">
         <div
           role="tablist"
-          aria-label="Premium billing interval"
+          aria-label="Billing interval"
           className="inline-flex border border-rule rounded-full p-1 bg-paper-light"
         >
           <button
@@ -183,11 +184,11 @@ export default function PricingPage() {
           <p className="label mb-3">For consistent insight</p>
           <div className="mb-2 flex items-baseline gap-1.5">
             <span className="font-serif text-4xl">${premiumPrice.toFixed(2)}</span>
-            <span className="text-slate text-sm font-mono">/ {premiumPeriod}</span>
+            <span className="text-slate text-sm font-mono">/ {period}</span>
           </div>
-          {equivalentMonthly ? (
+          {premiumEquivalentMonthly ? (
             <p className="text-xs text-slate-soft font-mono mb-6">
-              ${equivalentMonthly}/mo equivalent · billed yearly
+              ${premiumEquivalentMonthly}/mo equivalent · billed yearly
             </p>
           ) : (
             <p className="text-xs text-slate-soft font-mono mb-6">
@@ -232,12 +233,18 @@ export default function PricingPage() {
         <div className="border border-rule rounded-3xl p-6 bg-paper-light flex flex-col">
           <p className="label mb-3">Pro</p>
           <div className="mb-2 flex items-baseline gap-1.5">
-            <span className="font-serif text-4xl">${PRO_MONTHLY_USD.toFixed(2)}</span>
-            <span className="text-slate text-sm font-mono">/ month</span>
+            <span className="font-serif text-4xl">${proPrice.toFixed(2)}</span>
+            <span className="text-slate text-sm font-mono">/ {period}</span>
           </div>
-          <p className="text-xs text-slate-soft font-mono mb-6">
-            For breeders, multi-pet homes, fosters
-          </p>
+          {proEquivalentMonthly ? (
+            <p className="text-xs text-slate-soft font-mono mb-6">
+              ${proEquivalentMonthly}/mo equivalent · billed yearly
+            </p>
+          ) : (
+            <p className="text-xs text-slate-soft font-mono mb-6">
+              For breeders, multi-pet homes, fosters
+            </p>
+          )}
           <ul className="space-y-2.5 text-sm mb-8 flex-1">
             {[
               "75 analyses per month",
@@ -269,7 +276,7 @@ export default function PricingPage() {
             </p>
           )}
           <p className="label mt-3 text-xs text-slate-soft">
-            Monthly billing only · cancel any time
+            Monthly or annual · cancel anytime
           </p>
         </div>
       </div>

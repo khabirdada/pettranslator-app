@@ -34,11 +34,12 @@ export function getStripe(): Stripe {
   return _stripe;
 }
 
-// Price IDs (keep STRIPE_PRICE_MONTHLY/YEARLY names for backward compat;
-// they map to Premium). Pro shipped later as a third tier.
+// Price IDs (kept STRIPE_PRICE_MONTHLY/YEARLY names for the original
+// Premium tier for backward compat; Pro adds two more).
 export const STRIPE_PRICE_MONTHLY = process.env.STRIPE_PRICE_MONTHLY ?? "";
 export const STRIPE_PRICE_YEARLY = process.env.STRIPE_PRICE_YEARLY ?? "";
 export const STRIPE_PRICE_PRO_MONTHLY = process.env.STRIPE_PRICE_PRO_MONTHLY ?? "";
+export const STRIPE_PRICE_PRO_YEARLY = process.env.STRIPE_PRICE_PRO_YEARLY ?? "";
 
 /**
  * Maps a Stripe price ID back to the subscription tier we charge for.
@@ -51,7 +52,7 @@ export const STRIPE_PRICE_PRO_MONTHLY = process.env.STRIPE_PRICE_PRO_MONTHLY ?? 
 export type SubscriptionTier = "free" | "premium" | "pro";
 export function priceIdToTier(priceId: string | null | undefined): SubscriptionTier {
   if (!priceId) return "free";
-  if (priceId === STRIPE_PRICE_PRO_MONTHLY) return "pro";
+  if (priceId === STRIPE_PRICE_PRO_MONTHLY || priceId === STRIPE_PRICE_PRO_YEARLY) return "pro";
   if (priceId === STRIPE_PRICE_MONTHLY || priceId === STRIPE_PRICE_YEARLY) return "premium";
   return "free";
 }
@@ -60,6 +61,8 @@ export function tierToPriceId(
   tier: "premium" | "pro",
   interval: "monthly" | "annual",
 ): string {
-  if (tier === "pro") return STRIPE_PRICE_PRO_MONTHLY; // monthly only for now
+  if (tier === "pro") {
+    return interval === "annual" ? STRIPE_PRICE_PRO_YEARLY : STRIPE_PRICE_PRO_MONTHLY;
+  }
   return interval === "annual" ? STRIPE_PRICE_YEARLY : STRIPE_PRICE_MONTHLY;
 }

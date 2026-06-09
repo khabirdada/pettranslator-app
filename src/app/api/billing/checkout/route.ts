@@ -29,12 +29,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
   const tier = body.tier === "pro" ? "pro" : "premium";
-  // Pro is monthly-only for now. Premium accepts both.
-  const interval = tier === "pro"
-    ? "monthly"
-    : body.interval === "monthly"
-      ? "monthly"
-      : "annual";
+  // Both Premium and Pro now have monthly + annual.
+  const interval = body.interval === "monthly" ? "monthly" : "annual";
   const priceId = tierToPriceId(tier, interval);
   if (!priceId) {
     return NextResponse.json({ error: "price_not_configured" }, { status: 500 });
