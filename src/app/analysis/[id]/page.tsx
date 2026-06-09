@@ -545,7 +545,11 @@ export default function AnalysisPage({
                       <p className="font-mono text-[10px] uppercase tracking-[0.15em] text-slate-soft mb-2">
                         {a.category.replace(/-/g, " ")} · {a.readingTime}
                       </p>
-                      <h3 className="!font-serif !text-sm sm:!text-[15px] !leading-snug !font-normal text-ink group-hover:text-terra transition">
+                      {/* Mobile: text-lg (18px) since cards are full-width
+                          and titles can easily wrap to 2 lines without
+                          feeling cramped. Desktop sm+: text-[15px] keeps
+                          3-column cards compact. */}
+                      <h3 className="!font-serif !text-lg sm:!text-[15px] !leading-snug !font-normal text-ink group-hover:text-terra transition">
                         {a.title}
                       </h3>
                     </div>
