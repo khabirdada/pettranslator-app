@@ -14,8 +14,10 @@ const PRICE_PER_INPUT_MTOK = 3.0;
 const PRICE_PER_OUTPUT_MTOK = 15.0;
 
 export type AnalyzeOpts = {
-  /** Publicly fetchable URL of the image (signed Supabase Storage URL). */
-  imageUrl: string;
+  /** Publicly fetchable URL(s) of the image(s). Single-image analyses
+   *  pass a one-element array. Video analyses pass 5 evenly-spaced frame
+   *  URLs as a temporal sequence (frame 1 = early, frame N = late). */
+  imageUrls: string[];
   /** One-sentence user-provided context (optional). */
   userContext?: string;
   /** Pet profile fields (species/age/breed) if known. */
@@ -44,6 +46,18 @@ export async function analyzeImage(opts: AnalyzeOpts): Promise<AnalyzeResponse> 
   const profileLine = opts.petProfile
     ? `pet_profile: ${JSON.stringify(opts.petProfile)}`
     : "pet_profile: (not provided)";
+
+  const urls = opts.imageUrls.filter(Boolean);
+  if (urls.length === 0) {
+    return { ok: false, error: "no_image_urls", durationMs: Date.now() - t0 };
+  }
+  const isSequence = urls.length > 1;
+
+  // Sequence hint for Claude when N > 1. Tells the model these are
+  // temporally ordered frames from one short video, NOT separate pets.
+  const sequenceLine = isSequence
+    ? `media_kind: video_frames\nframe_count: ${urls.length}\nframe_order: frame 1 is earliest, frame ${urls.length} is latest. Treat the sequence as ~${urls.length}× evenly-spaced moments from a short clip (≤15s). Note any behavioral changes ACROSS the sequence (e.g. relaxation, arousal escalation, displacement signals appearing).`
+    : "media_kind: single_image";
 
   // Two tools, one per output shape. Anthropic enforces each tool's
   // input_schema — no oneOf needed. tool_choice='any' forces the model
@@ -205,12 +219,12 @@ export async function analyzeImage(opts: AnalyzeOpts): Promise<AnalyzeResponse> 
           content: [
             {
               type: "text",
-              text: `user_context: ${contextLine}\n${profileLine}`,
+              text: `user_context: ${contextLine}\n${profileLine}\n${sequenceLine}`,
             },
-            {
-              type: "image",
-              source: { type: "url", url: opts.imageUrl },
-            },
+            ...urls.map((url) => ({
+              type: "image" as const,
+              source: { type: "url" as const, url },
+            })),
           ],
         },
       ],

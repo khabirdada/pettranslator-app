@@ -2,19 +2,48 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import {
+  extractFramesFromVideo,
+  isVideoFile,
+  releaseFramePreviews,
+  VIDEO_MIME_TYPES,
+  type ExtractedFrame,
+} from "@/lib/extract-frames";
+
+const VIDEO_FRAME_COUNT = 5;
+const MAX_VIDEO_DURATION_SEC = 30;
 
 type SubmitState =
   | { kind: "idle" }
+  | { kind: "extracting" } // video → 5 frames in the browser
   | { kind: "uploading" }
   | { kind: "analyzing" }
   | { kind: "error"; message: string }
   | {
       kind: "rate_limited";
       message: string;
-      tier: "free" | "premium" | "tester";
+      tier: "free" | "premium" | "pro" | "tester";
       upgradeUrl: string | null;
       title: string;
     };
+
+type MediaKind = "image" | "video";
+
+// Convert known extract-frames error codes to friendly messages.
+function videoErrorMessage(code: string): string {
+  switch (code) {
+    case "video_too_long":
+      return `Video is longer than ${MAX_VIDEO_DURATION_SEC} seconds. Trim it first — the AI works best on short clips.`;
+    case "video_decode_failed":
+      return "Your browser couldn't decode this video format. Try .mp4 (H.264) or .mov from iPhone.";
+    case "video_empty":
+      return "That video file appears empty or corrupt. Try a different clip.";
+    case "video_seek_failed":
+      return "Frame extraction stalled. Try a smaller clip (under 15 seconds) or a different file.";
+    default:
+      return `Couldn't process the video (${code}). Try a different clip or use a still image.`;
+  }
+}
 
 // Elapsed-seconds thresholds for progressive UI messaging.
 // Anchored to the actual Vercel maxDuration (60s) and the
@@ -26,11 +55,24 @@ const ELAPSED_TIMEOUT = 65;  // assume function dead, surface recovery
 export default function AnalyzePage() {
   const router = useRouter();
   const [file, setFile] = useState<File | null>(null);
+  const [mediaKind, setMediaKind] = useState<MediaKind>("image");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  // For video uploads: 5 extracted JPEG frames + their preview URLs.
+  // Released on unmount or when the user picks a new file.
+  const [frames, setFrames] = useState<ExtractedFrame[]>([]);
   const [context, setContext] = useState("");
   const [state, setState] = useState<SubmitState>({ kind: "idle" });
   const [elapsedSec, setElapsedSec] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Clean up any blob URLs we created when the component unmounts.
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+      releaseFramePreviews(frames);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Tick an elapsed-seconds counter whenever an in-flight request is open.
   // Drives the progressive "this is taking longer…" / hard-timeout
@@ -62,9 +104,15 @@ export default function AnalyzePage() {
   }, [elapsedSec, state.kind]);
 
   function onFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    // Release any previous previews before swapping
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    releaseFramePreviews(frames);
+    setFrames([]);
+
     const f = e.target.files?.[0] ?? null;
     setFile(f);
     setPreviewUrl(f ? URL.createObjectURL(f) : null);
+    setMediaKind(f && isVideoFile(f) ? "video" : "image");
     setState({ kind: "idle" });
   }
 
@@ -72,39 +120,86 @@ export default function AnalyzePage() {
     e.preventDefault();
     if (!file) return;
 
-    setState({ kind: "uploading" });
     try {
-      // 1) Ask the server for a signed upload URL
+      // For video, extract frames CLIENT-SIDE first. Claude doesn't accept
+      // raw video; we send a sequence of 5 JPEG frames as a multi-image
+      // message. Frame extraction takes ~1-3s per second of source video
+      // on a phone, so we surface the 'extracting' state to the user.
+      let extractedFrames = frames;
+      if (mediaKind === "video" && frames.length === 0) {
+        setState({ kind: "extracting" });
+        try {
+          extractedFrames = await extractFramesFromVideo(file, {
+            frameCount: VIDEO_FRAME_COUNT,
+            maxDurationSec: MAX_VIDEO_DURATION_SEC,
+          });
+          setFrames(extractedFrames);
+        } catch (err) {
+          const code = (err as { code?: string })?.code ?? "video_decode_failed";
+          setState({ kind: "error", message: videoErrorMessage(code) });
+          return;
+        }
+      }
+
+      // What we upload depends on media kind:
+      //   image → 1 file, original
+      //   video → 5 files, the extracted JPEG frames
+      const uploadPayloads: { mime: string; size: number; data: Blob }[] =
+        mediaKind === "video"
+          ? extractedFrames.map((f) => ({
+              mime: "image/jpeg",
+              size: f.blob.size,
+              data: f.blob,
+            }))
+          : [{ mime: file.type, size: file.size, data: file }];
+
+      setState({ kind: "uploading" });
+
+      // 1) Sign N upload URLs in one round-trip
       const urlRes = await fetch("/api/upload-url", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mime: file.type, size: file.size }),
+        body: JSON.stringify({
+          mime: uploadPayloads[0].mime,
+          size: uploadPayloads[0].size,
+          count: uploadPayloads.length,
+        }),
       });
       if (!urlRes.ok) {
         const err = await urlRes.json().catch(() => ({}));
         throw new Error(err.error ?? `upload_url_${urlRes.status}`);
       }
-      const { uploadUrl, storagePath } = (await urlRes.json()) as {
-        uploadUrl: string;
-        storagePath: string;
-      };
+      const urlJson = (await urlRes.json()) as
+        | { uploadUrl: string; storagePath: string }
+        | { uploadUrls: string[]; storagePaths: string[] };
 
-      // 2) Upload directly to Supabase Storage (browser → CDN, skips Vercel)
-      const putRes = await fetch(uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": file.type },
-        body: file,
-      });
-      if (!putRes.ok) {
-        throw new Error(`storage_put_${putRes.status}`);
-      }
+      const uploadUrls =
+        "uploadUrls" in urlJson ? urlJson.uploadUrls : [urlJson.uploadUrl];
+      const storagePaths =
+        "storagePaths" in urlJson ? urlJson.storagePaths : [urlJson.storagePath];
+
+      // 2) Upload all blobs in parallel (browser → Supabase Storage, skips Vercel)
+      await Promise.all(
+        uploadPayloads.map(async (p, i) => {
+          const putRes = await fetch(uploadUrls[i], {
+            method: "PUT",
+            headers: { "Content-Type": p.mime },
+            body: p.data,
+          });
+          if (!putRes.ok) throw new Error(`storage_put_${putRes.status}`);
+        }),
+      );
 
       // 3) Tell our API to enqueue the analysis job
       setState({ kind: "analyzing" });
       const analyzeRes = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ storagePath, userContext: context.trim() }),
+        body: JSON.stringify(
+          mediaKind === "video"
+            ? { framePaths: storagePaths, userContext: context.trim() }
+            : { storagePath: storagePaths[0], userContext: context.trim() },
+        ),
       });
 
       // Specific handling for 402 (rate-limit hit)
@@ -150,7 +245,10 @@ export default function AnalyzePage() {
     }
   }
 
-  const submitting = state.kind === "uploading" || state.kind === "analyzing";
+  const submitting =
+    state.kind === "extracting" ||
+    state.kind === "uploading" ||
+    state.kind === "analyzing";
 
   return (
     <main className="mx-auto max-w-2xl px-6 py-12 sm:py-20">
@@ -159,8 +257,10 @@ export default function AnalyzePage() {
         Show me your <em className="text-terra">pet</em>.
       </h1>
       <p className="text-slate mb-8 max-w-prose">
-        Upload a clear image of your dog or cat. Video coming after launch —
-        for now, a single representative photo.
+        Upload a clear photo or a short video (≤{MAX_VIDEO_DURATION_SEC}s) of
+        your dog or cat. For video we extract {VIDEO_FRAME_COUNT} frames in your
+        browser and analyze them as a temporal sequence — your file never leaves
+        your device unless you submit.
       </p>
 
       {/* Best-results checklist — improves output quality before the user uploads */}
@@ -183,22 +283,74 @@ export default function AnalyzePage() {
       </div>
 
       <form onSubmit={onSubmit} className="space-y-6">
-        {/* File picker */}
+        {/* File picker — accepts both image AND video. Mobile browsers
+            surface both camera-roll types when we list both groups. */}
         <div>
-          <label className="label mb-2 block">Image · jpg, png, webp, heic</label>
+          <label className="label mb-2 block">
+            Image or video · jpg, png, webp, heic, mp4, mov
+          </label>
           <input
             ref={fileInputRef}
             type="file"
-            accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+            accept={[
+              "image/jpeg",
+              "image/png",
+              "image/webp",
+              "image/heic",
+              "image/heif",
+              ...VIDEO_MIME_TYPES,
+            ].join(",")}
             onChange={onFileChange}
             disabled={submitting}
             className="block w-full text-sm text-slate file:mr-4 file:py-2.5 file:px-5 file:rounded-full file:border-0 file:bg-ink file:text-paper-light file:font-medium file:cursor-pointer file:hover:bg-terra"
           />
         </div>
 
-        {previewUrl && (
+        {/* Preview — image rendered as <img>, video as <video controls
+            muted playsInline> so users can scrub before submitting. */}
+        {previewUrl && mediaKind === "image" && (
           <div className="border border-rule rounded-2xl overflow-hidden bg-paper-light">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={previewUrl} alt="" className="w-full h-auto block max-h-96 object-contain" />
+          </div>
+        )}
+        {previewUrl && mediaKind === "video" && (
+          <div className="border border-rule rounded-2xl overflow-hidden bg-paper-light">
+            <video
+              src={previewUrl}
+              controls
+              muted
+              playsInline
+              className="w-full h-auto block max-h-96 object-contain"
+            />
+            <p className="px-4 py-3 text-xs text-slate-soft font-mono border-t border-rule">
+              {VIDEO_FRAME_COUNT} frames will be extracted in your browser
+              {frames.length > 0 ? " — done" : " on submit"}.
+            </p>
+          </div>
+        )}
+
+        {/* Frame strip — shown after extraction so the user sees exactly
+            what the AI receives. Builds trust ("this is the data") +
+            quality control ("if the frames look bad, try again"). */}
+        {frames.length > 0 && (
+          <div>
+            <p className="label mb-2">Frames the AI will see</p>
+            <ul className="grid grid-cols-5 gap-2">
+              {frames.map((f) => (
+                <li
+                  key={f.index}
+                  className="aspect-video border border-rule rounded-lg overflow-hidden bg-paper-light"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={f.previewUrl}
+                    alt={`Frame ${f.index + 1} at ${f.timestampSec.toFixed(1)}s`}
+                    className="w-full h-full object-cover"
+                  />
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 
@@ -236,6 +388,7 @@ export default function AnalyzePage() {
           disabled={!file || submitting}
           className="btn w-full justify-center"
         >
+          {state.kind === "extracting" && "Extracting frames…"}
           {state.kind === "uploading" && "Uploading…"}
           {state.kind === "analyzing" && "Reading behavioral signals…"}
           {(state.kind === "idle" || state.kind === "error") && "Analyze →"}
@@ -251,9 +404,11 @@ export default function AnalyzePage() {
             <div className="flex items-center gap-3">
               <span className="inline-block size-2 rounded-full bg-terra animate-pulse" />
               <span>
-                {state.kind === "uploading"
-                  ? `Uploading · ${elapsedSec}s`
-                  : `Analyzing · ${elapsedSec}s`}
+                {state.kind === "extracting"
+                  ? `Extracting frames · ${elapsedSec}s`
+                  : state.kind === "uploading"
+                    ? `Uploading · ${elapsedSec}s`
+                    : `Analyzing · ${elapsedSec}s`}
               </span>
             </div>
             {state.kind === "analyzing" && elapsedSec >= ELAPSED_LONG && elapsedSec < ELAPSED_ALMOST && (

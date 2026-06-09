@@ -34,20 +34,40 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  let body: { storagePath?: string; userContext?: string; petId?: string };
+  let body: {
+    storagePath?: string;
+    framePaths?: string[];
+    userContext?: string;
+    petId?: string;
+  };
   try {
     body = await req.json();
   } catch {
     return NextResponse.json({ error: "invalid_json" }, { status: 400 });
   }
 
-  const storagePath = String(body.storagePath || "").trim();
+  // Accept EITHER:
+  //   storagePath: "<userId>/<uuid>.jpg"                  → single-image
+  //   framePaths:  ["<userId>/<uuid>/frame-01.jpg", ...]  → video (N frames)
+  const framePaths = Array.isArray(body.framePaths)
+    ? body.framePaths.map((p) => String(p).trim()).filter(Boolean)
+    : [];
+  const singlePath = String(body.storagePath || "").trim();
+  const allPaths = framePaths.length > 0 ? framePaths : [singlePath].filter(Boolean);
   const userContext = String(body.userContext || "").slice(0, MAX_CONTEXT_LEN);
   const petId = body.petId ? String(body.petId) : null;
 
-  // Storage path must be scoped to this user (paths are <userId>/<uuid>.<ext>)
-  if (!storagePath.startsWith(`${user.id}/`)) {
-    return NextResponse.json({ error: "invalid_storage_path" }, { status: 400 });
+  if (allPaths.length === 0) {
+    return NextResponse.json({ error: "missing_storage_path" }, { status: 400 });
+  }
+  if (allPaths.length > 8) {
+    return NextResponse.json({ error: "too_many_frames" }, { status: 400 });
+  }
+  // Every path must be scoped to this user (paths are <userId>/...)
+  for (const p of allPaths) {
+    if (!p.startsWith(`${user.id}/`)) {
+      return NextResponse.json({ error: "invalid_storage_path" }, { status: 400 });
+    }
   }
 
   const svc = createServiceClient();
@@ -91,13 +111,18 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 1. Insert the analyses row (status = processing)
+  // 1. Insert the analyses row (status = processing). For single-image:
+  //    storage_path is set, frame_paths is NULL. For video: frame_paths
+  //    is set, storage_path is the FIRST frame for backward-compat with
+  //    any UI that still reads storage_path.
+  const isVideo = framePaths.length > 0;
   const { data: analysis, error: insErr } = await svc
     .from("analyses")
     .insert({
       user_id: user.id,
       pet_id: petId,
-      storage_path: storagePath,
+      storage_path: allPaths[0],
+      frame_paths: isVideo ? framePaths : null,
       user_context: userContext,
       status: "processing",
       prompt_version: PROMPT_VERSION,
@@ -122,20 +147,27 @@ export async function POST(req: NextRequest) {
     if (pet) petProfile = pet;
   }
 
-  // 3. Sign a short-lived read URL so Claude can fetch the image
-  const { data: signed, error: sErr } = await svc.storage
-    .from("videos")
-    .createSignedUrl(storagePath, SIGNED_URL_TTL_SECS);
-
-  if (sErr || !signed) {
-    console.error("signed_url_failed", sErr?.message);
+  // 3. Sign short-lived read URLs (one per path) so Claude can fetch
+  //    every frame in parallel.
+  const signedResults = await Promise.all(
+    allPaths.map((p) =>
+      svc.storage.from("videos").createSignedUrl(p, SIGNED_URL_TTL_SECS),
+    ),
+  );
+  const signedFailed = signedResults.find((r) => r.error || !r.data);
+  if (signedFailed) {
+    console.error("signed_url_failed", signedFailed.error?.message);
     await svc.from("analyses").update({ status: "failed" }).eq("id", analysis.id);
-    return NextResponse.json({ error: "signed_url_failed", analysisId: analysis.id }, { status: 500 });
+    return NextResponse.json(
+      { error: "signed_url_failed", analysisId: analysis.id },
+      { status: 500 },
+    );
   }
+  const imageUrls = signedResults.map((r) => r.data!.signedUrl);
 
-  // 4. Call Claude
+  // 4. Call Claude — single-image and multi-frame share the same code path
   const result = await analyzeImage({
-    imageUrl: signed.signedUrl,
+    imageUrls,
     userContext,
     petProfile,
   });

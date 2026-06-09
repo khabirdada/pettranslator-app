@@ -59,10 +59,12 @@ export async function GET(req: Request) {
 async function processJob(job: { id: string; analysis_id: string; attempts: number }) {
   const svc = createServiceClient();
 
-  // Fetch the analysis row to get storage_path + user_context + pet_id
+  // Fetch the analysis row. frame_paths is the new column for video
+  // analyses (0006_frame_paths.sql); old image-only analyses leave it
+  // null and the code falls back to storage_path.
   const { data: analysis, error: aErr } = await svc
     .from("analyses")
-    .select("id, storage_path, user_context, pet_id")
+    .select("id, storage_path, frame_paths, user_context, pet_id")
     .eq("id", job.analysis_id)
     .single();
 
@@ -88,19 +90,27 @@ async function processJob(job: { id: string; analysis_id: string; attempts: numb
     if (pet) petProfile = pet;
   }
 
-  // Generate a short-lived signed URL for Claude to fetch the image
-  const { data: signed, error: sErr } = await svc.storage
-    .from("videos")
-    .createSignedUrl(analysis.storage_path, SIGNED_URL_TTL_SECS);
-
-  if (sErr || !signed) {
-    await retryOrDie(job, `signed_url_failed: ${sErr?.message}`);
+  // Generate short-lived signed URLs for Claude to fetch the image(s).
+  // Multi-frame video analyses store paths in frame_paths; legacy single
+  // images use storage_path.
+  const paths: string[] = (analysis.frame_paths && analysis.frame_paths.length > 0)
+    ? analysis.frame_paths
+    : [analysis.storage_path];
+  const signedResults = await Promise.all(
+    paths.map((p) =>
+      svc.storage.from("videos").createSignedUrl(p, SIGNED_URL_TTL_SECS),
+    ),
+  );
+  const failed = signedResults.find((r) => r.error || !r.data);
+  if (failed) {
+    await retryOrDie(job, `signed_url_failed: ${failed.error?.message}`);
     return;
   }
+  const imageUrls = signedResults.map((r) => r.data!.signedUrl);
 
-  // Call the AI
+  // Call the AI — single-image and multi-frame share the same code path
   const result = await analyzeImage({
-    imageUrl: signed.signedUrl,
+    imageUrls,
     userContext: analysis.user_context ?? "",
     petProfile,
   });
