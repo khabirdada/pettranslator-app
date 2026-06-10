@@ -68,14 +68,13 @@ export default function RootLayout({
       className={`${newsreader.variable} ${plusJakartaSans.variable} ${jetBrainsMono.variable} antialiased`}
     >
       <head>
-        {/* Plausible analytics — privacy-friendly, cookieless, no Google.
-            Tracks pageviews + outbound clicks + file downloads. Pinned to
-            apex pettranslator.ai so app + marketing share one dashboard;
-            Plausible recommends this for multi-subdomain setups. */}
+        {/* Cloudflare Web Analytics — same beacon token as the marketing
+            site so app.pettranslator.ai's traffic shows up in the same
+            Cloudflare dashboard. No cookies, no PII, GDPR-clean. */}
         <script
           defer
-          data-domain="pettranslator.ai"
-          src="https://plausible.io/js/script.outbound-links.file-downloads.js"
+          src="https://static.cloudflareinsights.com/beacon.min.js"
+          data-cf-beacon='{"token": "4d51d6d7b6cd4407a557472f367fd630"}'
         />
       </head>
       <body className="min-h-screen">
