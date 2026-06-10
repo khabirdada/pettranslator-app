@@ -78,6 +78,44 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-screen">
+        {/* Identity-graph JSON-LD — same WebApplication + founder Person
+            entities as the marketing site (one canonical entity across
+            both subdomains). The Wikidata anchor (Q140167480 for the
+            app, Q140157373 for the founder) is what AI engines use to
+            resolve "PetTranslator.ai" as a structured entity rather
+            than ambiguous text. Single source of truth across pettranslator.ai
+            and app.pettranslator.ai. */}
+        <script
+          type="application/ld+json"
+          // eslint-disable-next-line react/no-danger
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@graph": [
+                {
+                  "@type": "WebApplication",
+                  "@id": "https://pettranslator.ai/#application",
+                  name: "PetTranslator.ai",
+                  url: "https://pettranslator.ai/",
+                  description:
+                    "AI behavioral analysis for dog and cat owners. Upload one photo — get observed markers, behavioral state, and an action plan. AVSAB-aligned.",
+                  applicationCategory: "LifestyleApplication",
+                  operatingSystem: "All",
+                  foundingDate: "2026",
+                  creator: { "@id": "https://journal.elelaf.com/about/#reviewer-person" },
+                  sameAs: ["https://www.wikidata.org/wiki/Q140167480"],
+                },
+                {
+                  "@type": "Person",
+                  "@id": "https://journal.elelaf.com/about/#reviewer-person",
+                  name: "Khabir Uddin",
+                  url: "https://journal.elelaf.com/about/",
+                  sameAs: ["https://www.wikidata.org/wiki/Q140157373"],
+                },
+              ],
+            }),
+          }}
+        />
         <SessionBridge />
         {children}
       </body>
