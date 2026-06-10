@@ -67,6 +67,17 @@ export default function RootLayout({
       lang="en"
       className={`${newsreader.variable} ${plusJakartaSans.variable} ${jetBrainsMono.variable} antialiased`}
     >
+      <head>
+        {/* Plausible analytics — privacy-friendly, cookieless, no Google.
+            Tracks pageviews + outbound clicks + file downloads. Pinned to
+            apex pettranslator.ai so app + marketing share one dashboard;
+            Plausible recommends this for multi-subdomain setups. */}
+        <script
+          defer
+          data-domain="pettranslator.ai"
+          src="https://plausible.io/js/script.outbound-links.file-downloads.js"
+        />
+      </head>
       <body className="min-h-screen">
         <SessionBridge />
         {children}

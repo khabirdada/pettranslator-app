@@ -115,7 +115,18 @@ export async function POST(req: NextRequest) {
   //    storage_path is set, frame_paths is NULL. For video: frame_paths
   //    is set, storage_path is the FIRST frame for backward-compat with
   //    any UI that still reads storage_path.
+  //
+  // processing_priority: stamped per-tier so the cron sweeper (and any
+  // future async queue) drains paid users first. Lower = higher priority.
   const isVideo = framePaths.length > 0;
+  const priority =
+    profile?.is_tester
+      ? 50
+      : subStatus === "active" && profile?.subscription_tier === "pro"
+        ? 10
+        : subStatus === "active"
+          ? 50
+          : 100;
   const { data: analysis, error: insErr } = await svc
     .from("analyses")
     .insert({
@@ -127,6 +138,7 @@ export async function POST(req: NextRequest) {
       status: "processing",
       prompt_version: PROMPT_VERSION,
       model: ACTIVE_MODEL,
+      processing_priority: priority,
     })
     .select("id")
     .single();

@@ -14,6 +14,10 @@ type AnalysisRecord = {
   duration_ms: number | null;
   created_at: string;
   completed_at: string | null;
+  /** Set server-side based on subscription_status + is_tester. Drives the
+   *  "Download vet-ready PDF" button visibility. The PDF route also
+   *  enforces this server-side; this flag is purely UI affordance. */
+  canExportPdf?: boolean;
 };
 
 type AnalysisOutput =
@@ -406,6 +410,33 @@ export default function AnalysisPage({
           </p>
         )}
       </section>
+
+      {/* VET-READY PDF EXPORT — Pro/Premium/Tester only.
+          Subtle pill button under the action plan. The button is a real
+          anchor so the browser handles Content-Disposition: attachment
+          natively (no fetch dance, no blob URL leak). data-plausible
+          tracks downloads to measure how many users actually print/share
+          their reports — strong proxy for value. */}
+      {data?.canExportPdf && (
+        <div className="mb-10 -mt-2">
+          <a
+            href={`/api/analysis/${id}/pdf`}
+            className="inline-flex items-center gap-2 rounded-full border border-terra/40 hover:border-terra hover:bg-terra hover:text-paper-light text-terra text-sm font-medium px-5 py-2.5 transition"
+            data-analytics="pdf-export"
+          >
+            <span aria-hidden>↓</span>
+            <span>Download vet-ready PDF</span>
+            <span className="font-mono text-[10px] uppercase tracking-[0.15em] opacity-70">
+              · 1 page · A4
+            </span>
+          </a>
+          <p className="text-slate-soft text-xs mt-2 max-w-prose">
+            Print-friendly clinical summary — observed markers, interpretation,
+            confidence rationale, and the Do/Avoid plan. Bring it to your vet
+            or behaviorist.
+          </p>
+        </div>
+      )}
 
       {/* PROFESSIONAL REFERRAL — high-visibility callout */}
       {r.refer_to_professional && (

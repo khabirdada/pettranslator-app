@@ -27,14 +27,40 @@ export async function GET(req: Request) {
 
   const svc = createServiceClient();
 
-  // Atomically claim up to PICK_BATCH queued jobs by flipping status to in_flight
+  // Atomically claim up to PICK_BATCH queued jobs.
+  // Order: priority first (Pro=10, Premium=50, Free=100), then FIFO on
+  // created_at within the same priority bucket. Joins via analysis_id →
+  // analyses.processing_priority so we don't need to mirror the column
+  // on analysis_jobs.
+  //
+  // Note: Supabase's update().select() doesn't easily express the join,
+  // so we do a two-step: pick IDs ordered by priority, then update
+  // those specific rows. Slightly more chatty but ordering is correct.
+  const { data: candidates, error: candErr } = await svc
+    .from("analysis_jobs")
+    .select("id, analysis_id, attempts, analyses!inner(processing_priority)")
+    .eq("status", "queued")
+    .lt("attempts", MAX_ATTEMPTS)
+    .order("analyses(processing_priority)", { ascending: true })
+    .order("created_at", { ascending: true })
+    .limit(PICK_BATCH);
+
+  if (candErr) {
+    console.error("pick_candidates_failed", candErr.message);
+    return NextResponse.json({ error: "pick_failed" }, { status: 500 });
+  }
+  const candidateIds = (candidates ?? []).map((c) => c.id);
+  if (candidateIds.length === 0) {
+    return NextResponse.json({ processed: 0, message: "no_queued_jobs" });
+  }
+
+  // Claim those IDs (status flip in one atomic UPDATE so concurrent
+  // cron runs can't double-pick the same job).
   const { data: jobs, error: pickErr } = await svc
     .from("analysis_jobs")
     .update({ status: "in_flight", picked_at: new Date().toISOString() })
-    .eq("status", "queued")
-    .lt("attempts", MAX_ATTEMPTS)
-    .order("created_at")
-    .limit(PICK_BATCH)
+    .in("id", candidateIds)
+    .eq("status", "queued") // re-check status to avoid races
     .select("id, analysis_id, attempts");
 
   if (pickErr) {
