@@ -16,6 +16,7 @@
   --slate-soft:   #8A8A8A;
   --terra-soft:   #D88460;
   --terra-light:  #E3A684;
+  --terra-cream:  #F6E9E2;  /* Soft terra wash — referral/callout backgrounds only */
   --rule:         #D8D2BF;
   --rule-soft:    #E8E2CD;
 
@@ -39,6 +40,7 @@
   --color-terra:        var(--terra);
   --color-terra-soft:   var(--terra-soft);
   --color-terra-light:  var(--terra-light);
+  --color-terra-cream:  var(--terra-cream);
   --color-slate:        var(--slate);
   --color-slate-soft:   var(--slate-soft);
   --color-rule:         var(--rule);
