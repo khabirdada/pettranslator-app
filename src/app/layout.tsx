@@ -103,6 +103,18 @@ export default function RootLayout({
                   operatingSystem: "All",
                   foundingDate: "2026",
                   creator: { "@id": "https://journal.elelaf.com/about/#reviewer-person" },
+                  // Mirrors site-next's AggregateOffer. Lives on every
+                  // app-subdomain page so the identity graph carries the
+                  // same pricing summary as the marketing site.
+                  offers: {
+                    "@type": "AggregateOffer",
+                    priceCurrency: "USD",
+                    lowPrice: "0",
+                    highPrice: "9.99",
+                    offerCount: "3",
+                    availability: "https://schema.org/InStock",
+                    url: "https://pettranslator.ai/pricing",
+                  },
                   // sameAs mirrors the marketing site exactly so both
                   // subdomains contribute the same identity graph to
                   // Google Knowledge Graph / AI search engines.
