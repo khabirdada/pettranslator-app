@@ -183,10 +183,17 @@ async function retryOrDie(
       .from("analysis_jobs")
       .update({ status: "dead", attempts: newAttempts, last_error: errMsg })
       .eq("id", job.id);
-    // Also flip the analyses row to failed so the UI can show a real state
+    // Also flip the analyses row to failed so the UI can show a real state.
+    // failure_reason mirrors analysis_jobs.last_error so a single query on
+    // the analyses table shows what killed the run — no cross-join needed.
     const { data } = await svc.from("analysis_jobs").select("analysis_id").eq("id", job.id).single();
     if (data) {
-      await svc.from("analyses").update({ status: "failed" }).eq("id", data.analysis_id);
+      const truncated = errMsg.replace(/\s+/g, " ").trim().slice(0, 500);
+      console.error("cron_analyze_dead", { analysisId: data.analysis_id, reason: truncated });
+      await svc
+        .from("analyses")
+        .update({ status: "failed", failure_reason: truncated })
+        .eq("id", data.analysis_id);
     }
   } else {
     // Bump attempts, put back into queued state for next tick to retry

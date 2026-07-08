@@ -25,6 +25,32 @@ export const maxDuration = 60; // Vercel Hobby supports up to 60s; analysis ≤3
 const MAX_CONTEXT_LEN = 240;
 const SIGNED_URL_TTL_SECS = 300;
 
+// Truncate + trim before writing failure_reason so the DB check
+// constraint (<= 500 chars) can never trip. Error messages from
+// third-party SDKs occasionally include stack fragments.
+function packFailureReason(stage: string, detail: unknown): string {
+  const raw = detail instanceof Error ? detail.message : String(detail ?? "");
+  const cleaned = raw.replace(/\s+/g, " ").trim().slice(0, 480 - stage.length);
+  return cleaned ? `${stage}: ${cleaned}` : stage;
+}
+
+// Centralized failure marker. Keeps the console + DB writes in
+// lockstep so we never again get a "failed" row with no diagnostic.
+async function markFailed(
+  svc: ReturnType<typeof createServiceClient>,
+  analysisId: string,
+  stage: string,
+  detail: unknown,
+) {
+  const reason = packFailureReason(stage, detail);
+  console.error("analyze_failed", { analysisId, stage, detail: String(detail) });
+  await svc
+    .from("analyses")
+    .update({ status: "failed", failure_reason: reason })
+    .eq("id", analysisId);
+  return reason;
+}
+
 export async function POST(req: NextRequest) {
   const supabase = await createClient();
   const {
@@ -168,8 +194,7 @@ export async function POST(req: NextRequest) {
   );
   const signedFailed = signedResults.find((r) => r.error || !r.data);
   if (signedFailed) {
-    console.error("signed_url_failed", signedFailed.error?.message);
-    await svc.from("analyses").update({ status: "failed" }).eq("id", analysis.id);
+    await markFailed(svc, analysis.id, "signed_url_failed", signedFailed.error?.message);
     return NextResponse.json(
       { error: "signed_url_failed", analysisId: analysis.id },
       { status: 500 },
@@ -177,16 +202,23 @@ export async function POST(req: NextRequest) {
   }
   const imageUrls = signedResults.map((r) => r.data!.signedUrl);
 
-  // 4. Call Claude — single-image and multi-frame share the same code path
-  const result = await analyzeImage({
-    imageUrls,
-    userContext,
-    petProfile,
-  });
+  // 4. Call Claude — single-image and multi-frame share the same code path.
+  // Wrap in try/catch so uncaught throws (Anthropic SDK network errors,
+  // JSON schema parse failures, etc.) get diagnostic-tagged instead of
+  // leaving the row stuck in "processing" with no explanation.
+  let result: Awaited<ReturnType<typeof analyzeImage>>;
+  try {
+    result = await analyzeImage({ imageUrls, userContext, petProfile });
+  } catch (err) {
+    await markFailed(svc, analysis.id, "analyze_threw", err);
+    return NextResponse.json(
+      { error: "analyze_threw", analysisId: analysis.id },
+      { status: 500 },
+    );
+  }
 
   if (!result.ok) {
-    console.error("analyze_failed", result.error);
-    await svc.from("analyses").update({ status: "failed" }).eq("id", analysis.id);
+    await markFailed(svc, analysis.id, "analyze_failed", result.error);
     return NextResponse.json({ error: result.error, analysisId: analysis.id }, { status: 500 });
   }
 
