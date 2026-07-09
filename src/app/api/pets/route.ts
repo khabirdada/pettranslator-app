@@ -50,6 +50,11 @@ function resolveCap(profile: {
   return PET_LIMIT_BY_TIER.free;
 }
 
+// TTL for the signed avatar-display URLs the list endpoint returns.
+// Long enough that the page stays fresh through several navigations
+// but short enough that the URL is not durable if it leaks.
+const AVATAR_URL_TTL_SECS = 900; // 15 min
+
 // -----------------------------------------------------------------------------
 // GET — list pets
 // -----------------------------------------------------------------------------
@@ -62,7 +67,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("pet_profiles")
-    .select("id, name, species, breed, approximate_age, created_at")
+    .select("id, name, species, breed, approximate_age, photo_path, created_at")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false });
 
@@ -70,7 +75,31 @@ export async function GET() {
     console.error("pets_list_failed", error.message);
     return NextResponse.json({ error: "list_failed" }, { status: 500 });
   }
-  return NextResponse.json({ pets: data ?? [] });
+
+  // Mint fresh 15-min signed URLs for every pet that has a photo_path.
+  // We batch-sign via createSignedUrls (one round-trip) to keep this
+  // fast even when the user has 15 Pro-tier pets.
+  const rows = data ?? [];
+  const paths = rows
+    .map((r) => r.photo_path)
+    .filter((p): p is string => !!p);
+  const photoUrlByPath = new Map<string, string>();
+  if (paths.length > 0) {
+    const svc = createServiceClient();
+    const { data: signed } = await svc
+      .storage
+      .from("videos")
+      .createSignedUrls(paths, AVATAR_URL_TTL_SECS);
+    for (const item of signed ?? []) {
+      if (item.path && item.signedUrl) photoUrlByPath.set(item.path, item.signedUrl);
+    }
+  }
+
+  const pets = rows.map((r) => ({
+    ...r,
+    photo_url: r.photo_path ? photoUrlByPath.get(r.photo_path) ?? null : null,
+  }));
+  return NextResponse.json({ pets });
 }
 
 // -----------------------------------------------------------------------------
@@ -89,6 +118,7 @@ export async function POST(req: NextRequest) {
     species?: string;
     breed?: string;
     approximate_age?: string;
+    photo_path?: string;
   };
   try {
     body = await req.json();
@@ -104,10 +134,21 @@ export async function POST(req: NextRequest) {
   const age = body.approximate_age
     ? String(body.approximate_age).trim().slice(0, MAX_AGE_LEN) || null
     : null;
+  // photo_path is minted by /api/pets/upload-avatar and must be under
+  // the user's own auth.uid prefix. Reject foreign paths to prevent a
+  // malicious client from linking someone else's file.
+  const photoPath = body.photo_path
+    ? (String(body.photo_path).trim().startsWith(`${user.id}/`)
+        ? String(body.photo_path).trim()
+        : null)
+    : null;
 
   if (!name) return NextResponse.json({ error: "name_required" }, { status: 400 });
   if (species !== "dog" && species !== "cat") {
     return NextResponse.json({ error: "invalid_species" }, { status: 400 });
+  }
+  if (body.photo_path && photoPath === null) {
+    return NextResponse.json({ error: "invalid_photo_path" }, { status: 400 });
   }
 
   // Enforce the tier cap. Do the count via service client so RLS
@@ -152,8 +193,9 @@ export async function POST(req: NextRequest) {
       species,
       breed,
       approximate_age: age,
+      photo_path: photoPath,
     })
-    .select("id, name, species, breed, approximate_age, created_at")
+    .select("id, name, species, breed, approximate_age, photo_path, created_at")
     .single();
 
   if (insErr || !pet) {
