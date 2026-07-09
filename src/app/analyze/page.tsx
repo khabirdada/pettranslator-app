@@ -9,6 +9,7 @@ import {
   VIDEO_MIME_TYPES,
   type ExtractedFrame,
 } from "@/lib/extract-frames";
+import { PetPicker } from "@/components/PetPicker";
 
 const VIDEO_FRAME_COUNT = 5;
 const MAX_VIDEO_DURATION_SEC = 30;
@@ -61,6 +62,10 @@ export default function AnalyzePage() {
   // Released on unmount or when the user picks a new file.
   const [frames, setFrames] = useState<ExtractedFrame[]>([]);
   const [context, setContext] = useState("");
+  // Optional pet-profile selection. null = "no pet"; the analyze route
+  // handles null petId identically to how it did before this feature
+  // existed, so users who Skip lose nothing.
+  const [petId, setPetId] = useState<string | null>(null);
   const [state, setState] = useState<SubmitState>({ kind: "idle" });
   const [elapsedSec, setElapsedSec] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -197,8 +202,8 @@ export default function AnalyzePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(
           mediaKind === "video"
-            ? { framePaths: storagePaths, userContext: context.trim() }
-            : { storagePath: storagePaths[0], userContext: context.trim() },
+            ? { framePaths: storagePaths, userContext: context.trim(), petId }
+            : { storagePath: storagePaths[0], userContext: context.trim(), petId },
         ),
       });
 
@@ -283,6 +288,12 @@ export default function AnalyzePage() {
       </div>
 
       <form onSubmit={onSubmit} className="space-y-6">
+        {/* Pet picker — inline capture. Sits above the file picker so
+            the user tags the analysis with a pet before uploading, not
+            after. Default is "None" — zero friction for users who
+            don't want a saved profile. Sends petId in the analyze POST. */}
+        <PetPicker value={petId} onChange={setPetId} disabled={submitting} />
+
         {/* File picker — accepts both image AND video. Mobile browsers
             surface both camera-roll types when we list both groups. */}
         <div>
