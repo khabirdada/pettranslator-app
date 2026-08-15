@@ -37,13 +37,20 @@ function safeEqual(a: string, b: string): boolean {
 type Svc = ReturnType<typeof createServiceClient>;
 
 // Supabase count helper — head:true means no rows come back over the wire.
+//
+// `since` is an ISO timestamp; when present the count is restricted to rows
+// created at or after it. This started life as a generic `apply` callback,
+// but .select() and .gte() return different builder types, so the callback
+// could not be typed without threading four generics through for no runtime
+// benefit. Every caller only ever wanted "count rows since date", so the
+// narrower parameter is both simpler and type-correct.
 async function countRows(
   svc: Svc,
   table: string,
-  apply?: (q: ReturnType<Svc["from"]>) => unknown,
+  since?: string,
 ): Promise<number> {
   let q = svc.from(table).select("*", { count: "exact", head: true });
-  if (apply) q = apply(q) as typeof q;
+  if (since) q = q.gte("created_at", since);
   const { count, error } = await q;
   if (error) {
     console.error("metrics_count_failed", { table, message: error.message });
@@ -96,9 +103,9 @@ export async function GET(req: NextRequest) {
       .limit(2000),
     countRows(svc, "pet_profiles"),
     countRows(svc, "profiles"),
-    countRows(svc, "profiles", (q) => q.gte("created_at", iso(1))),
-    countRows(svc, "profiles", (q) => q.gte("created_at", iso(7))),
-    countRows(svc, "profiles", (q) => q.gte("created_at", iso(30))),
+    countRows(svc, "profiles", iso(1)),
+    countRows(svc, "profiles", iso(7)),
+    countRows(svc, "profiles", iso(30)),
   ]);
 
   if (pErr || aErr) {
