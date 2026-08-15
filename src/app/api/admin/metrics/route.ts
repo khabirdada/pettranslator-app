@@ -95,7 +95,7 @@ export async function GET(req: NextRequest) {
   ] = await Promise.all([
     svc
       .from("profiles")
-      .select("subscription_status, subscription_tier, is_tester, onboarding_stage, email_opt_out, lifetime_analyses_used, created_at"),
+      .select("subscription_status, subscription_tier, is_tester, onboarding_stage, email_opt_out, created_at"),
     svc
       .from("analyses")
       .select("status, refusal_code, failure_reason, duration_ms, inference_cost_usd, pet_id, frame_paths, created_at")
