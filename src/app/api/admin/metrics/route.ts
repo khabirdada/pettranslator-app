@@ -110,7 +110,20 @@ export async function GET(req: NextRequest) {
 
   if (pErr || aErr) {
     console.error("metrics_fetch_failed", { p: pErr?.message, a: aErr?.message });
-    return NextResponse.json({ error: "fetch_failed" }, { status: 500 });
+    // Surface the Postgres message. This endpoint is already behind the admin
+    // key, and the failure mode in practice is "a migration hasn't been applied
+    // to this environment yet" — which is impossible to diagnose from a bare
+    // "fetch_failed". Postgres reports the offending column by name, and a
+    // column name is not user data.
+    return NextResponse.json(
+      {
+        error: "fetch_failed",
+        profiles_error: pErr?.message ?? null,
+        analyses_error: aErr?.message ?? null,
+        hint: "A missing-column error usually means a migration in supabase/migrations/ has not been applied to this project.",
+      },
+      { status: 500 },
+    );
   }
 
   const P = profiles ?? [];
