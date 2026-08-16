@@ -105,16 +105,28 @@ export async function GET(
 
   // 6. Render — react-pdf returns a Node Readable; convert to a Web
   //    ReadableStream so Next's Response can stream it directly.
-  const stream = await renderToStream(
-    AnalysisPdf({
-      output,
+  let stream;
+  try {
+    stream = await renderToStream(
+      AnalysisPdf({
+        output,
+        analysisId: analysis.id,
+        model: analysis.model,
+        promptVersion: analysis.prompt_version,
+        generatedAt: new Date(analysis.completed_at ?? analysis.created_at),
+        pet,
+      }),
+    );
+  } catch (error) {
+    console.error("PDF render failed", {
       analysisId: analysis.id,
-      model: analysis.model,
-      promptVersion: analysis.prompt_version,
-      generatedAt: new Date(analysis.completed_at ?? analysis.created_at),
-      pet,
-    }),
-  );
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return Response.json(
+      { error: "PDF generation failed. Please try again." },
+      { status: 500 },
+    );
+  }
 
   const webStream = new ReadableStream({
     start(controller) {
