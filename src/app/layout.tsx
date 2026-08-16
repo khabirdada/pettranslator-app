@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import Script from "next/script";
 import { Newsreader, Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { SessionBridge } from "@/components/SessionBridge";
@@ -78,6 +79,16 @@ export default function RootLayout({
         />
       </head>
       <body className="min-h-screen">
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-0C5Q1PW08V"
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', 'G-0C5Q1PW08V');`}
+        </Script>
         {/* Identity-graph JSON-LD — same WebApplication + founder Person
             entities as the marketing site (one canonical entity across
             both subdomains). The Wikidata anchor (Q140167480 for the
