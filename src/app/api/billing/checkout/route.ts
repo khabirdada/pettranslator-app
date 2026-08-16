@@ -40,6 +40,15 @@ export async function POST(req: NextRequest) {
   // before — prevents duplicate customer rows in Stripe when the same
   // user starts checkout twice.
   const svc = createServiceClient();
+  const referralCode = req.cookies.get("pettranslator_ref")?.value?.toLowerCase();
+  const { data: creatorPartner } = referralCode
+    ? await svc
+        .from("creator_partners")
+        .select("id, code")
+        .eq("code", referralCode)
+        .eq("status", "active")
+        .maybeSingle()
+    : { data: null };
   const { data: profile } = await svc
     .from("profiles")
     .select("stripe_customer_id")
@@ -79,9 +88,27 @@ export async function POST(req: NextRequest) {
     cancel_url: `${APP_URL}/pricing?upgrade=cancelled`,
     // Subscription-mode niceties
     subscription_data: {
-      metadata: { supabase_user_id: user.id },
+      metadata: {
+        supabase_user_id: user.id,
+        ...(creatorPartner?.code ? { creator_ref: creatorPartner.code } : {}),
+      },
     },
   });
+
+  if (creatorPartner && session.id) {
+    const { error: referralError } = await svc.from("creator_referrals").upsert(
+      {
+        creator_partner_id: creatorPartner.id,
+        referred_user_id: user.id,
+        stripe_checkout_session_id: session.id,
+        status: "checkout_started",
+      },
+      { onConflict: "creator_partner_id,referred_user_id" },
+    );
+    if (referralError) {
+      console.error("creator_referral_record_failed", referralError.message);
+    }
+  }
 
   return NextResponse.json({ url: session.url });
 }
