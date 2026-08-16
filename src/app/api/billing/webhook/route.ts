@@ -164,6 +164,25 @@ async function handleSubscriptionUpsert(
   } else {
     await svc.from("profiles").update(update).eq("stripe_customer_id", customerId);
   }
+
+  if (userId && sub.metadata?.creator_ref) {
+    const { data: partner } = await svc
+      .from("creator_partners")
+      .select("id")
+      .eq("code", sub.metadata.creator_ref)
+      .maybeSingle();
+    if (partner) {
+      await svc
+        .from("creator_referrals")
+        .update({
+          stripe_subscription_id: sub.id,
+          status: status === "active" ? "active" : "checkout_started",
+          activated_at: status === "active" ? new Date().toISOString() : null,
+        })
+        .eq("creator_partner_id", partner.id)
+        .eq("referred_user_id", userId);
+    }
+  }
 }
 
 async function handleSubscriptionDeleted(
