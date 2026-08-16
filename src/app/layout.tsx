@@ -3,6 +3,7 @@ import Script from "next/script";
 import { Newsreader, Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { SessionBridge } from "@/components/SessionBridge";
+import { AuthSessionControls } from "@/components/AuthSessionControls";
 
 // Editorial-scientific typography — matches the marketing site exactly.
 const newsreader = Newsreader({
@@ -152,6 +153,7 @@ gtag('config', 'G-0C5Q1PW08V');`}
           }}
         />
         <SessionBridge />
+        <AuthSessionControls />
         {children}
       </body>
     </html>

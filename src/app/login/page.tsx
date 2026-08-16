@@ -20,6 +20,7 @@ function LoginForm() {
   const [error, setError] = useState<string>("");
   const searchParams = useSearchParams();
   const next = searchParams.get("next") ?? "/dashboard";
+  const reason = searchParams.get("reason");
 
   async function sendMagicLink(e: React.FormEvent) {
     e.preventDefault();
@@ -64,6 +65,17 @@ function LoginForm() {
       <p className="text-slate mb-10">
         Enter your email. We&apos;ll send a one-click magic link. No password to remember.
       </p>
+
+      {reason === "inactive" && (
+        <p className="mb-6 rounded-xl border border-rule bg-paper-light px-4 py-3 text-sm text-slate" role="status">
+          You were signed out after seven days without activity. Sign in again to continue.
+        </p>
+      )}
+      {reason === "manual" && (
+        <p className="mb-6 rounded-xl border border-rule bg-paper-light px-4 py-3 text-sm text-slate" role="status">
+          You&apos;re signed out.
+        </p>
+      )}
 
       <form onSubmit={sendMagicLink} className="space-y-4">
         <label className="block">

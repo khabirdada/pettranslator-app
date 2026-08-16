@@ -23,7 +23,6 @@ import {
   StyleSheet,
   Text,
   View,
-  Font,
 } from "@react-pdf/renderer";
 
 // Brand colors mirrored from globals.css. Hex values match the live site
@@ -37,55 +36,16 @@ const COLORS = {
   rule: "#E8E3D3",
 };
 
-// Register Newsreader (serif) + Plus Jakarta Sans (sans) from Google Fonts
-// CDN at module load. @react-pdf bundles fonts at render time so the PDF
-// is self-contained — no fallback issues on the receiving device.
-//
-// Note: the URLs below are stable Google Fonts static endpoints. If
-// Google were to break these, fall back to system Times/Helvetica
-// (already covered by @react-pdf's defaults).
-Font.register({
-  family: "Newsreader",
-  fonts: [
-    {
-      src: "https://fonts.gstatic.com/s/newsreader/v23/cY9jfjOCX1hbuyalUrK49dLac06G1ZGsZBtoBCzBDXXD9JVF.ttf",
-      fontWeight: 400,
-    },
-    {
-      src: "https://fonts.gstatic.com/s/newsreader/v23/cY9jfjOCX1hbuyalUrK49dLac06G1ZGsZBtoBC_CDXXD9JVF.ttf",
-      fontWeight: 500,
-    },
-    {
-      src: "https://fonts.gstatic.com/s/newsreader/v23/cY9jfjOCX1hbuyalUrK49dLac06G1ZGsZBtoBCnEDXXD9JVF.ttf",
-      fontWeight: 600,
-    },
-  ],
-});
-
-Font.register({
-  family: "PlusJakartaSans",
-  fonts: [
-    {
-      src: "https://fonts.gstatic.com/s/plusjakartasans/v8/LDIbaomQNQcsA88c7O9yZ4KMCoOg4IA6-91aHEjcWuA_qU79TJWVPbgxv4ZAVdQDhg.ttf",
-      fontWeight: 400,
-    },
-    {
-      src: "https://fonts.gstatic.com/s/plusjakartasans/v8/LDIbaomQNQcsA88c7O9yZ4KMCoOg4IA6-91aHEjcWuA_qU79TJ-WPbgxv4ZAVdQDhg.ttf",
-      fontWeight: 500,
-    },
-    {
-      src: "https://fonts.gstatic.com/s/plusjakartasans/v8/LDIbaomQNQcsA88c7O9yZ4KMCoOg4IA6-91aHEjcWuA_qU79TIWaPbgxv4ZAVdQDhg.ttf",
-      fontWeight: 600,
-    },
-  ],
-});
+// Use PDF's built-in fonts. They require no network request during a Vercel
+// function invocation, so report generation cannot be broken by a moved or
+// unavailable font-CDN URL.
 
 const styles = StyleSheet.create({
   page: {
     paddingTop: 56,
     paddingBottom: 64,
     paddingHorizontal: 56,
-    fontFamily: "PlusJakartaSans",
+    fontFamily: "Helvetica",
     fontSize: 10.5,
     lineHeight: 1.5,
     color: COLORS.ink,
@@ -102,13 +62,12 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   brandWord: {
-    fontFamily: "Newsreader",
+    fontFamily: "Times-Roman",
     fontSize: 18,
-    fontWeight: 500,
     letterSpacing: 0.2,
   },
   brandSub: {
-    fontFamily: "PlusJakartaSans",
+    fontFamily: "Helvetica",
     fontSize: 8.5,
     color: COLORS.slateSoft,
     letterSpacing: 1.2,
@@ -119,21 +78,19 @@ const styles = StyleSheet.create({
     color: COLORS.slateSoft,
     letterSpacing: 1.2,
     textTransform: "uppercase",
-    fontWeight: 500,
+    fontFamily: "Helvetica-Bold",
   },
   h1: {
-    fontFamily: "Newsreader",
+    fontFamily: "Times-Roman",
     fontSize: 22,
-    fontWeight: 500,
     color: COLORS.ink,
     marginTop: 8,
     marginBottom: 4,
     lineHeight: 1.25,
   },
   h2: {
-    fontFamily: "Newsreader",
+    fontFamily: "Times-Roman",
     fontSize: 13,
-    fontWeight: 500,
     color: COLORS.ink,
     marginBottom: 6,
   },
@@ -155,15 +112,14 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   confidenceTier: {
-    fontFamily: "Newsreader",
+    fontFamily: "Times-Roman",
     fontSize: 14,
-    fontWeight: 500,
     color: COLORS.terra,
   },
   confidencePct: {
     fontSize: 9,
     color: COLORS.slateSoft,
-    fontFamily: "PlusJakartaSans",
+    fontFamily: "Helvetica",
   },
   body: {
     fontSize: 10.5,
@@ -197,7 +153,7 @@ const styles = StyleSheet.create({
   doHeading: {
     fontSize: 9,
     color: COLORS.terra,
-    fontWeight: 600,
+    fontFamily: "Helvetica-Bold",
     letterSpacing: 1,
     textTransform: "uppercase",
     marginBottom: 4,
@@ -205,7 +161,7 @@ const styles = StyleSheet.create({
   avoidHeading: {
     fontSize: 9,
     color: COLORS.slateSoft,
-    fontWeight: 600,
+    fontFamily: "Helvetica-Bold",
     letterSpacing: 1,
     textTransform: "uppercase",
     marginBottom: 4,
@@ -234,9 +190,8 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
   },
   vetCalloutTitle: {
-    fontFamily: "Newsreader",
+    fontFamily: "Times-Bold",
     fontSize: 11,
-    fontWeight: 600,
     color: COLORS.terra,
     marginBottom: 4,
   },
